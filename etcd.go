@@ -1,7 +1,6 @@
 package main
 
 import (
-	"path/filepath"
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
@@ -18,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime/pprof"
 	"strings"
 	"time"
