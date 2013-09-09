@@ -26,7 +26,7 @@ func New() *FileSystem {
 
 }
 
-func (fs *FileSystem) Get(nodePath string, recursive, sorted bool, index uint64, term uint64) (*Event, error) {
+func (fs *FileSystem) Get(nodePath string, recursive bool, sorted bool, index uint64, term uint64) (*Event, error) {
 	n, err := fs.InternalGet(nodePath, index, term)
 
 	if err != nil {
