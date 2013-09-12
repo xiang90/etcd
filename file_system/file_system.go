@@ -74,6 +74,11 @@ func (fs *FileSystem) Get(nodePath string, recursive, sorted bool, index uint64,
 	return e, nil
 }
 
+// CreateDir function is wrapper to create directory node.
+func (fs *FileSystem) CreateDir(nodePath string, expireTime time.Time, index uint64, term uint64) (*Event, error) {
+	return fs.Create(nodePath, "", expireTime, index, term)
+}
+
 // Create function creates the Node at nodePath. Create will help to create intermediate directories with no ttl.
 // If the node has already existed, create will fail.
 // If any node on the path is a file, create will fail.
