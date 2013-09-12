@@ -1,8 +1,9 @@
 package fileSystem
 
 import (
-	etcdErr "github.com/coreos/etcd/error"
 	"path"
+
+	etcdErr "github.com/coreos/etcd/error"
 )
 
 func getUserByCertSubj() string {

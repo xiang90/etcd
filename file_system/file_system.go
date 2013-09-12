@@ -33,8 +33,8 @@ func (fs *FileSystem) Get(nodePath string, recursive, sorted bool, index uint64,
 		return nil, err
 	}
 
-        // check read permission
-        err = fs.has_perm(n, "r", recursive)
+	// check read permission
+	err = fs.has_perm(n, "r", recursive)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,6 @@ func (fs *FileSystem) Get(nodePath string, recursive, sorted bool, index uint64,
 	return e, nil
 }
 
-
 // Create function creates the Node at nodePath. Create will help to create
 // intermediate directories with no ttl.
 // If the node has already existed, create will fail.
@@ -117,12 +116,12 @@ func (fs *FileSystem) Create(nodePath string, value string, expireTime time.Time
 	if len(value) != 0 { // create file
 		e.Value = value
 
-		n = newFile(nodePath, value, fs.Index, fs.Term, d, "", expireTime)
+		n = newFile(nodePath, value, fs.Index, fs.Term, d, d.ACL, expireTime)
 
 	} else { // create directory
 		e.Dir = true
 
-		n = newDir(nodePath, fs.Index, fs.Term, d, "", expireTime)
+		n = newDir(nodePath, fs.Index, fs.Term, d, d.ACL, expireTime)
 
 	}
 
