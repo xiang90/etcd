@@ -15,6 +15,7 @@ const (
 	EcodeNotDir         = 104
 	EcodeNodeExist      = 105
 	EcodeKeyIsPreserved = 106
+	EcodePermissionDenied = 107
 
 	EcodeValueRequired     = 200
 	EcodePrevValueRequired = 201

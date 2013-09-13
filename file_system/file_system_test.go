@@ -30,7 +30,7 @@ func TestCreateAndGet(t *testing.T) {
 	}
 
 	// create a directory
-	_, err = fs.Create("/fooDir", "", Permanent, 3, 1)
+	_, err = fs.CreateDir("/fooDir", Permanent, 3, 1)
 
 	if err != nil {
 		t.Fatal("Cannot create /fooDir")
@@ -78,7 +78,7 @@ func TestUpdateFile(t *testing.T) {
 
 	// create a directory, update its ttl, to see if it will be deleted
 
-	_, err = fs.Create("/foo/foo", "", Permanent, 3, 1)
+	_, err = fs.CreateDir("/foo/foo", Permanent, 3, 1)
 
 	if err != nil {
 		t.Fatalf("cannot create dir [%s] [%s]", "/foo/foo", err.Error())
@@ -90,7 +90,7 @@ func TestUpdateFile(t *testing.T) {
 		t.Fatal("cannot create [%s]", err.Error())
 	}
 
-	_, err = fs.Create("/foo/foo/foo2", "", Permanent, 5, 1)
+	_, err = fs.CreateDir("/foo/foo/foo2", Permanent, 5, 1)
 	if err != nil {
 		t.Fatal("cannot create [%s]", err.Error())
 	}

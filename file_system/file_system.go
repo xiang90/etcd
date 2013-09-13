@@ -19,16 +19,56 @@ type FileSystem struct {
 }
 
 func New() *FileSystem {
-	return &FileSystem{
+	fs := &FileSystem{
 		Root:       newDir("/", 0, 0, nil, "", Permanent),
 		WatcherHub: newWatchHub(1000),
 	}
 
+	// set up ACL
+	fs.Root.ACL = "admin_aclname"
+	user := "admin"
+
+	// very dangerous
+	_, err := fs.InternalCreate("/ACL/admin_aclname/r/"+user, "1", Permanent, 1, 1)
+	if err != nil {
+		return nil
+	}
+	_, err = fs.InternalCreate("/ACL/admin_aclname/w/"+user, "1", Permanent, 1, 1)
+	if err != nil {
+		return nil
+	}
+	_, err = fs.InternalCreate("/ACL/admin_aclname/c/"+user, "1", Permanent, 1, 1)
+	if err != nil {
+		return nil
+	}
+
+	return fs
+
+}
+
+// pathCleaning function is cleaning the input string of pathname by calling the
+// path.Clean() function and eliminating the last "/"
+// This is very useful in terms of handling input "/a/b/c/" as usually typed
+// in for directory
+func pathCleaning(nodePath string) string {
+	nodePath = path.Clean(nodePath)
+	pathlength := len(nodePath)
+	if string(nodePath[pathlength-1]) == "/" {
+		nodePath = nodePath[:(pathlength - 1)]
+	}
+	return nodePath
 }
 
 func (fs *FileSystem) Get(nodePath string, recursive, sorted bool, index uint64, term uint64) (*Event, error) {
+	nodePath = pathCleaning("/" + nodePath)
 	n, err := fs.InternalGet(nodePath, index, term)
 
+	if err != nil {
+		return nil, err
+	}
+
+	// check read permission
+	err = fs.hasPerm(n, "r", recursive)
 	if err != nil {
 		return nil, err
 	}
@@ -74,14 +114,30 @@ func (fs *FileSystem) Get(nodePath string, recursive, sorted bool, index uint64,
 	return e, nil
 }
 
+// CreateDir function is wrapper to create directory node.
+func (fs *FileSystem) CreateDir(nodePath string, expireTime time.Time, index uint64, term uint64) (*Event, error) {
+	return fs.Create(nodePath, "", expireTime, index, term)
+}
+
 // Create function creates the Node at nodePath. Create will help to create intermediate directories with no ttl.
 // If the node has already existed, create will fail.
 // If any node on the path is a file, create will fail.
+// NOTE: if the value is empty string (""), this function will create a
+// directory
 func (fs *FileSystem) Create(nodePath string, value string, expireTime time.Time, index uint64, term uint64) (*Event, error) {
-	nodePath = path.Clean("/" + nodePath)
+
+	nodePath = pathCleaning("/" + nodePath)
+
+	// make sure we have write permission on the parent's directory
+	// note that if the parent directory doesn't exist, we will automatically
+	// create it. In this case, we check the closest parent directory.
+	err := fs.hasPermOnParent(nodePath, "w")
+	if err != nil {
+		return nil, err
+	}
 
 	// make sure we can create the node
-	_, err := fs.InternalGet(nodePath, index, term)
+	_, err = fs.InternalGet(nodePath, index, term)
 
 	if err == nil { // key already exists
 		return nil, etcdErr.NewError(etcdErr.EcodeNodeExist, nodePath)
@@ -89,10 +145,21 @@ func (fs *FileSystem) Create(nodePath string, value string, expireTime time.Time
 
 	etcdError, _ := err.(etcdErr.Error)
 
-	if etcdError.ErrorCode == 104 { // we cannot create the key due to meet a file while walking
+	if etcdError.ErrorCode == etcdErr.EcodeNotDir { // we cannot create the key due to meet a file while walking
 		return nil, err
 	}
 
+	return fs.InternalCreate(
+		nodePath,
+		value,
+		expireTime,
+		index,
+		term,
+	)
+}
+
+// A create function without ACL permission check
+func (fs *FileSystem) InternalCreate(nodePath string, value string, expireTime time.Time, index uint64, term uint64) (*Event, error) {
 	dir, _ := path.Split(nodePath)
 
 	// walk through the nodePath, create dirs and get the last directory node
@@ -109,12 +176,12 @@ func (fs *FileSystem) Create(nodePath string, value string, expireTime time.Time
 	if len(value) != 0 { // create file
 		e.Value = value
 
-		n = newFile(nodePath, value, fs.Index, fs.Term, d, "", expireTime)
+		n = newFile(nodePath, value, fs.Index, fs.Term, d, d.ACL, expireTime)
 
 	} else { // create directory
 		e.Dir = true
 
-		n = newDir(nodePath, fs.Index, fs.Term, d, "", expireTime)
+		n = newDir(nodePath, fs.Index, fs.Term, d, d.ACL, expireTime)
 
 	}
 
@@ -139,9 +206,17 @@ func (fs *FileSystem) Create(nodePath string, value string, expireTime time.Time
 // If the node is a file, the value and the ttl can be updated.
 // If the node is a directory, only the ttl can be updated.
 func (fs *FileSystem) Update(nodePath string, value string, expireTime time.Time, index uint64, term uint64) (*Event, error) {
+	nodePath = pathCleaning("/" + nodePath)
+
 	n, err := fs.InternalGet(nodePath, index, term)
 
 	if err != nil { // if the node does not exist, return error
+		return nil, err
+	}
+
+	// check write permission
+	err = fs.hasPerm(n, "w", false)
+	if err != nil {
 		return nil, err
 	}
 
@@ -182,10 +257,17 @@ func (fs *FileSystem) Update(nodePath string, value string, expireTime time.Time
 func (fs *FileSystem) TestAndSet(nodePath string, prevValue string, prevIndex uint64,
 	value string, expireTime time.Time, index uint64, term uint64) (*Event, error) {
 
+	nodePath = pathCleaning("/" + nodePath)
+
 	f, err := fs.InternalGet(nodePath, index, term)
 
 	if err != nil {
+		return nil, err
+	}
 
+	// check read and write permission
+	err = fs.hasPerm(f, "rw", false)
+	if err != nil {
 		return nil, err
 	}
 
@@ -212,10 +294,26 @@ func (fs *FileSystem) TestAndSet(nodePath string, prevValue string, prevIndex ui
 // Delete function deletes the node at the given path.
 // If the node is a directory, recursive must be true to delete it.
 func (fs *FileSystem) Delete(nodePath string, recursive bool, index uint64, term uint64) (*Event, error) {
+	nodePath = pathCleaning("/" + nodePath)
+
 	n, err := fs.InternalGet(nodePath, index, term)
 
 	if err != nil { // if the node does not exist, return error
 		return nil, err
+	}
+
+	// check write permission on parent node
+	err = fs.hasPermOnParent(nodePath, "w")
+	if err != nil {
+		return nil, err
+	}
+
+	// check write permission on this node
+	if recursive {
+		err = fs.hasPerm(n, "w", recursive)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	e := newEvent(Delete, nodePath, index, term)
@@ -265,7 +363,6 @@ func (fs *FileSystem) walk(nodePath string, walkFunc func(prev *Node, component 
 
 // InternalGet function get the node of the given nodePath.
 func (fs *FileSystem) InternalGet(nodePath string, index uint64, term uint64) (*Node, error) {
-	nodePath = path.Clean("/" + nodePath)
 
 	// update file system known index and term
 	fs.Index, fs.Term = index, term
