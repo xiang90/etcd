@@ -7,7 +7,7 @@ import (
 func TestACLRead(t *testing.T) {
 	fs := New()
 
-	user := "test"
+	user := "admin"
 
 	// setting up the tree and relevant acl
 
@@ -25,20 +25,23 @@ func TestACLRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n.ACL = "/ACL/acl_name"
+	n.ACL = "acl_name"
 
 	// begin testing
 
-	err = fs.has_perm(n, "r", true)
+	err = fs.hasPerm(n, "r", true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = fs.has_perm(n, "r", false)
+	err = fs.hasPerm(n, "r", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	e, err := fs.Get("/sample/gao", false, false, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if e.Value != "zhengao" {
 		t.Fatal(err)
 	}
@@ -49,7 +52,7 @@ func TestACLRecurRead(t *testing.T) {
 
 	fs := New()
 
-	user := "test"
+	user := "admin"
 
 	// setting up the tree and relevant acl
 
@@ -57,8 +60,12 @@ func TestACLRecurRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	_, err = fs.Create("/ACL/acl_name/w/"+user, "1", Permanent, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	_, err = fs.Create("/sample", "", Permanent, 1, 1)
+	_, err = fs.CreateDir("/sample", Permanent, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +74,7 @@ func TestACLRecurRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.ACL = "/ACL/acl_name"
+	d.ACL = "acl_name"
 
 	// */sample/gao* now inherits parent */sample*
 	_, err = fs.Create("/sample/gao/gao2", "zhengao", Permanent, 1, 1)
@@ -82,20 +89,58 @@ func TestACLRecurRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = fs.has_perm(d, "r", true)
+	err = fs.hasPerm(d, "r", true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	n, err := fs.InternalGet("/sample/gao/gao2", 1, 1)
-	err = fs.has_perm(n, "r", false)
+	err = fs.hasPerm(n, "r", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	e, err := fs.Get("/sample/gao/gao2", false, false, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if e.Value != "zhengao" {
 		t.Fatal(err)
 	}
 
+}
+
+func TestCreate(t *testing.T) {
+	fs := New()
+
+	user := "admin"
+
+	// setting up the tree and relevant acl
+
+        _, err := fs.Create("/ACL/acl_name/r/" + user, "1", Permanent, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+        _, err = fs.Create("/ACL/acl_name/w/" + user, "1", Permanent, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fs.Root.ACL = "acl_name"
+
+        // begin testing
+
+        _, err = fs.Create("/a/b/c", "1", Permanent, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+        _, err = fs.CreateDir("/a/b2", Permanent, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+        _, err = fs.Create("/a/b3", "1", Permanent, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
 }

@@ -2,25 +2,26 @@ package fileSystem
 
 import (
 	"path"
+	"strings"
 
 	etcdErr "github.com/coreos/etcd/error"
 )
 
-func getUserByCertSubj() string {
-	return "test"
+func getUser() string {
+	return "admin"
 }
 
-// check_perm function checks whether the given acl-name has permission for
+// checkPerm function checks whether the given acl-name has permission for
 // current user.
 // If it has, then return nil.
 // Otherwise, return error with code permission denied.
-func (fs *FileSystem) check_perm(acl string, perm string) error {
+func (fs *FileSystem) checkPerm(aclName string, perm string) error {
 
-	user := getUserByCertSubj()
+	user := getUser()
 
 	// Enumerate the permissions
 	for _, char := range perm {
-		_, err := fs.InternalGet(path.Join(acl, string(char), user), fs.Index, fs.Term)
+		_, err := fs.InternalGet(path.Join("/ACL", aclName, string(char), user), fs.Index, fs.Term)
 
 		if err != nil {
 			return etcdErr.NewError(etcdErr.EcodePermissionDenied, perm)
@@ -31,10 +32,10 @@ func (fs *FileSystem) check_perm(acl string, perm string) error {
 
 }
 
-// has_perm function is a higher level function wrapping check_perm so
+// hasPerm function is a higher level function wrapping checkPerm so
 // acl_stringas to provide recursive functionality
-func (fs *FileSystem) has_perm(n *Node, perm string, recursive bool) error {
-	err := fs.check_perm(n.ACL, perm)
+func (fs *FileSystem) hasPerm(n *Node, perm string, recursive bool) error {
+	err := fs.checkPerm(n.ACL, perm)
 	if err != nil {
 		return err
 	}
@@ -48,11 +49,38 @@ func (fs *FileSystem) has_perm(n *Node, perm string, recursive bool) error {
 				continue
 			}
 
-			err = fs.has_perm(child, perm, recursive)
+			err = fs.hasPerm(child, perm, recursive)
 			if err != nil {
 				return err
 			}
 		}
+	}
+
+	return nil
+}
+
+// hasPermOnParent function will check the permission based on the nodePath
+// passed in. It will disregard the last one name in the node path and check
+// permission on the closest parent directory node.
+func (fs *FileSystem) hasPermOnParent(nodePath string, perm string) error {
+	curNode := fs.Root
+
+	components := strings.Split(nodePath, "/")
+
+	// ignore the last node name. We are checking parent directory only
+	for i := 1; i < len(components)-1; i++ {
+		nodeName := components[i]
+		child, ok := curNode.Children[nodeName]
+
+		// We are checking closest parent only, since there's no further node
+		// name and directories will be created automatically and ACL will be
+		// passed down to those nodes.
+		if !ok {
+			err := fs.checkPerm(curNode.ACL, perm)
+			return err
+		}
+		curNode = child
+
 	}
 
 	return nil
