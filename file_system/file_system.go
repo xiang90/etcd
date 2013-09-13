@@ -197,6 +197,12 @@ func (fs *FileSystem) Update(nodePath string, value string, expireTime time.Time
 		return nil, err
 	}
 
+        // check write permission
+	err = fs.hasPerm(n, "w", false)
+	if err != nil {
+		return nil, err
+	}
+
 	e := newEvent(Update, nodePath, fs.Index, fs.Term)
 
 	if n.IsDir() { // if the node is a directory, we can only update ttl

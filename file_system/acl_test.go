@@ -43,7 +43,7 @@ func TestACLRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	if e.Value != "zhengao" {
-		t.Fatal(err)
+		t.Fatal("Get is wrong")
 	}
 
 }
@@ -117,30 +117,77 @@ func TestCreate(t *testing.T) {
 
 	// setting up the tree and relevant acl
 
-        _, err := fs.Create("/ACL/acl_name/r/" + user, "1", Permanent, 1, 1)
+	_, err := fs.Create("/ACL/acl_name/r/"+user, "1", Permanent, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-        _, err = fs.Create("/ACL/acl_name/w/" + user, "1", Permanent, 1, 1)
+	_, err = fs.Create("/ACL/acl_name/w/"+user, "1", Permanent, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	fs.Root.ACL = "acl_name"
 
-        // begin testing
+	// begin testing
 
-        _, err = fs.Create("/a/b/c", "1", Permanent, 1, 1)
+	_, err = fs.Create("/a/b/c", "1", Permanent, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-        _, err = fs.CreateDir("/a/b2", Permanent, 1, 1)
+	_, err = fs.CreateDir("/a/b2", Permanent, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-        _, err = fs.Create("/a/b3", "1", Permanent, 1, 1)
+	_, err = fs.Create("/a/b3", "1", Permanent, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestUpdate(t *testing.T) {
+	fs := New()
+	user := "admin"
+
+	// setting up the tree and relevant acl
+
+	_, err := fs.Create("/ACL/acl_name/r/"+user, "1", Permanent, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+        _, err = fs.Create("/ACL/acl_name/w/"+user, "1", Permanent, 1, 1)
+        if err != nil {
+        t.Fatal(err)
+        }
+
+	// begin testing
+
+	_, err = fs.Create("/sample/gao", "zhengao", Permanent, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+        n, err := fs.InternalGet("/sample/gao", 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n.ACL = "acl_name"
+
+	e, err := fs.Get("/sample/gao", false, false, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Value != "zhengao" {
+		t.Fatal("Get is wrong")
+	}
+
+        e, err = fs.Update("/sample/gao", "gaozhen", Permanent, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Value != "gaozhen" {
+		t.Fatal("Update is wrong")
+	}
+
+
 }
