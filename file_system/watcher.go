@@ -103,7 +103,7 @@ func (wh *watcherHub) notify(e *Event) {
 
 	currPath := "/"
 
-	// walk through all the paths
+        // walk through all the paths
 	for _, segment := range segments {
 		currPath = path.Join(currPath, segment)
 		wh.notifyWithPath(e, currPath, false)

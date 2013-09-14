@@ -149,13 +149,19 @@ func (fs *FileSystem) Create(nodePath string, value string, expireTime time.Time
 		return nil, err
 	}
 
-	return fs.InternalCreate(
+        e, err := fs.InternalCreate(
 		nodePath,
 		value,
 		expireTime,
 		index,
 		term,
 	)
+	if err != nil {
+	  return nil, err
+	}
+
+	fs.WatcherHub.notify(e)
+	return e, nil
 }
 
 // A create function without ACL permission check
@@ -198,7 +204,6 @@ func (fs *FileSystem) InternalCreate(nodePath string, value string, expireTime t
 		e.TTL = int64(expireTime.Sub(time.Now()) / time.Second)
 	}
 
-	fs.WatcherHub.notify(e)
 	return e, nil
 }
 

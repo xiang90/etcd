@@ -34,8 +34,8 @@ func (fs *FileSystem) checkPerm(aclName, perms string) error {
 
 // hasPerm function is a higher level function wrapping checkPerm so
 // acl_stringas to provide recursive functionality
-func (fs *FileSystem) hasPerm(n *Node, perm string, recursive bool) error {
-	err := fs.checkPerm(n.ACL, perm)
+func (fs *FileSystem) hasPerm(n *Node, perms string, recursive bool) error {
+	err := fs.checkPerm(n.ACL, perms)
 	if err != nil {
 		return err
 	}
@@ -45,11 +45,11 @@ func (fs *FileSystem) hasPerm(n *Node, perm string, recursive bool) error {
 
 		for _, child := range children {
 
-			if child.IsHidden() { // get will not list hidden node
+			if child.IsHidden() { // ignore hidden node
 				continue
 			}
 
-			err = fs.hasPerm(child, perm, recursive)
+			err = fs.hasPerm(child, perms, recursive)
 			if err != nil {
 				return err
 			}
