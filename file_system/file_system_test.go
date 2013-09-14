@@ -148,6 +148,10 @@ func TestUpdateFile(t *testing.T) {
 	if err == nil {
 		t.Fatalf("still can get sub node of sub dir after expiration [%s]", err.Error())
 	}
+	_, err = fs.Get("/foo/foo/foo2/boo", true, false, 7, 1)
+	if err == nil {
+		t.Fatalf("still can get sub node of sub dir after expiration [%s]", err.Error())
+	}
 
 }
 
@@ -324,50 +328,59 @@ func TestWatch(t *testing.T) {
 		t.Fatal("watch for Create node fails")
 	}
 
-	c, _ = fs.WatcherHub.watch("/foo/foo/foo", false, 0)
+	c, _ = fs.WatcherHub.watch("/foo/foo/foo", false, 2)
 	fs.Update("/foo/foo/foo", "car", Permanent, 2, 1)
 	e = nonblockingRetrive(c)
 	if e.Key != "/foo/foo/foo" {
 		t.Fatal("watch for Update node fails")
 	}
 
-	c, _ = fs.WatcherHub.watch("/foo/foo/foo", false, 0)
-	fs.TestAndSet("/foo/foo/foo", "car", 0, "bar", Permanent, 3, 1)
+	c, _ = fs.WatcherHub.watch("/foo/foo/foo", false, 3)
+	_, err := fs.TestAndSet("/foo/foo/foo", "car", 0, "bar", Permanent, 3, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	e = nonblockingRetrive(c)
 	if e.Key != "/foo/foo/foo" {
 		t.Fatal("watch for TestAndSet node fails")
 	}
 
-	c, _ = fs.WatcherHub.watch("/foo/foo/foo", false, 0)
-	fs.Delete("/foo", true, 4, 1) //recursively delete
+	c, _ = fs.WatcherHub.watch("/foo/foo/foo", false, 4)
+	_, err = fs.Delete("/foo", true, 4, 1) //recursively delete
+	if err != nil {
+		t.Fatal(err)
+	}
 	e = nonblockingRetrive(c)
 	if e.Key != "/foo" {
 		t.Fatal("watch for Delete node fails")
 	}
 
 	// watch at a prefix
-	c, _ = fs.WatcherHub.watch("/foo", true, 0)
-	fs.Create("/foo/foo/boo", "bar", Permanent, 5, 1)
+	c, _ = fs.WatcherHub.watch("/foo", true, 5)
+	_, err = fs.Create("/foo/foo/boo", "bar", Permanent, 5, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	e = nonblockingRetrive(c)
 	if e.Key != "/foo/foo/boo" {
 		t.Fatal("watch for Create subdirectory fails")
 	}
 
-	c, _ = fs.WatcherHub.watch("/foo", true, 0)
+	c, _ = fs.WatcherHub.watch("/foo", true, 6)
 	fs.Update("/foo/foo/boo", "foo", Permanent, 6, 1)
 	e = nonblockingRetrive(c)
 	if e.Key != "/foo/foo/boo" {
 		t.Fatal("watch for Update subdirectory fails")
 	}
 
-	c, _ = fs.WatcherHub.watch("/foo", true, 0)
+	c, _ = fs.WatcherHub.watch("/foo", true, 7)
 	fs.TestAndSet("/foo/foo/boo", "foo", 0, "bar", Permanent, 7, 1)
 	e = nonblockingRetrive(c)
 	if e.Key != "/foo/foo/boo" {
 		t.Fatal("watch for TestAndSet subdirectory fails")
 	}
 
-	c, _ = fs.WatcherHub.watch("/foo", true, 0)
+	c, _ = fs.WatcherHub.watch("/foo", true, 8)
 	fs.Delete("/foo/foo/boo", false, 8, 1)
 	e = nonblockingRetrive(c)
 	if e.Key != "/foo/foo/boo" {

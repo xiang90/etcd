@@ -15,16 +15,16 @@ func getUser() string {
 // current user.
 // If it has, then return nil.
 // Otherwise, return error with code permission denied.
-func (fs *FileSystem) checkPerm(aclName string, perm string) error {
+func (fs *FileSystem) checkPerm(aclName, perms string) error {
 
 	user := getUser()
 
 	// Enumerate the permissions
-	for _, char := range perm {
-		_, err := fs.InternalGet(path.Join("/ACL", aclName, string(char), user), fs.Index, fs.Term)
+	for _, perm := range perms {
+		_, err := fs.InternalGet(path.Join("/ACL", aclName, string(perm), user), fs.Index, fs.Term)
 
 		if err != nil {
-			return etcdErr.NewError(etcdErr.EcodePermissionDenied, perm)
+			return etcdErr.NewError(etcdErr.EcodePermissionDenied, string(perm))
 		}
 	}
 
@@ -34,8 +34,8 @@ func (fs *FileSystem) checkPerm(aclName string, perm string) error {
 
 // hasPerm function is a higher level function wrapping checkPerm so
 // acl_stringas to provide recursive functionality
-func (fs *FileSystem) hasPerm(n *Node, perm string, recursive bool) error {
-	err := fs.checkPerm(n.ACL, perm)
+func (fs *FileSystem) hasPerm(n *Node, perms string, recursive bool) error {
+	err := fs.checkPerm(n.ACL, perms)
 	if err != nil {
 		return err
 	}
@@ -45,11 +45,11 @@ func (fs *FileSystem) hasPerm(n *Node, perm string, recursive bool) error {
 
 		for _, child := range children {
 
-			if child.IsHidden() { // get will not list hidden node
+			if child.IsHidden() { // ignore hidden node
 				continue
 			}
 
-			err = fs.hasPerm(child, perm, recursive)
+			err = fs.hasPerm(child, perms, recursive)
 			if err != nil {
 				return err
 			}
@@ -62,7 +62,7 @@ func (fs *FileSystem) hasPerm(n *Node, perm string, recursive bool) error {
 // hasPermOnParent function will check the permission based on the nodePath
 // passed in. It will disregard the last one name in the node path and check
 // permission on the closest parent directory node.
-func (fs *FileSystem) hasPermOnParent(nodePath string, perm string) error {
+func (fs *FileSystem) hasPermOnParent(nodePath string, perms string) error {
 	curNode := fs.Root
 
 	components := strings.Split(nodePath, "/")
@@ -76,12 +76,13 @@ func (fs *FileSystem) hasPermOnParent(nodePath string, perm string) error {
 		// name and directories will be created automatically and ACL will be
 		// passed down to those nodes.
 		if !ok {
-			err := fs.checkPerm(curNode.ACL, perm)
+			err := fs.checkPerm(curNode.ACL, perms)
 			return err
 		}
 		curNode = child
 
 	}
 
-	return nil
+	err := fs.checkPerm(curNode.ACL, perms)
+	return err
 }
