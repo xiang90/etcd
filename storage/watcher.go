@@ -39,8 +39,8 @@ type WatchStream interface {
 	// TODO: remove the returned CancelFunc. Always use Cancel.
 	Watch(key []byte, prefix bool, startRev int64) (id int64, cancel CancelFunc)
 
-	// Chan returns a chan. All watched events will be sent to the returned chan.
-	Chan() <-chan []storagepb.Event
+	// Chan returns a chan. All watch response will be sent to the returned chan.
+	Chan() <-chan WatchResponse
 
 	// Cancel cancels a watcher by giving its ID. If watcher does not exist, an error will be
 	// returned.
@@ -54,13 +54,20 @@ type WatchStream interface {
 // one streaming chan to send out watched events and other control events.
 type watchStream struct {
 	watchable watchable
-	ch        chan []storagepb.Event
+	ch        chan WatchResponse
 
 	mu sync.Mutex // guards fields below it
 	// nextID is the ID pre-allocated for next new watcher in this stream
 	nextID  int64
 	closed  bool
 	cancels map[int64]CancelFunc
+}
+
+type WatchResponse struct {
+	// WatchID is the ID of the watcher this response sent to.
+	WatchID int64
+	// Events contains all the events that needs to send.
+	Events []storagepb.Event
 }
 
 // TODO: return error if ws is closed?
@@ -80,7 +87,7 @@ func (ws *watchStream) Watch(key []byte, prefix bool, startRev int64) (id int64,
 	return id, c
 }
 
-func (ws *watchStream) Chan() <-chan []storagepb.Event {
+func (ws *watchStream) Chan() <-chan WatchResponse {
 	return ws.ch
 }
 
