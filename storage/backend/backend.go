@@ -22,6 +22,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -44,6 +45,7 @@ type Backend interface {
 	Hash() (uint32, error)
 	// Size returns the current size of the backend.
 	Size() int64
+	Shrink() error
 	ForceCommit()
 	Close() error
 }
@@ -58,6 +60,7 @@ type Snapshot interface {
 }
 
 type backend struct {
+	mu sync.RWMutex
 	db *bolt.DB
 
 	batchInterval time.Duration
@@ -114,9 +117,12 @@ func (b *backend) ForceCommit() {
 
 func (b *backend) Snapshot() Snapshot {
 	b.batchTx.Commit()
+
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	tx, err := b.db.Begin(false)
 	if err != nil {
-		log.Fatalf("storage: cannot begin tx (%s)", err)
+		log.Fatalf("backend: cannot begin tx (%s)", err)
 	}
 	return &snapshot{tx}
 }
@@ -124,6 +130,8 @@ func (b *backend) Snapshot() Snapshot {
 func (b *backend) Hash() (uint32, error) {
 	h := crc32.New(crc32.MakeTable(crc32.Castagnoli))
 
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	err := b.db.View(func(tx *bolt.Tx) error {
 		c := tx.Cursor()
 		for next, _ := c.First(); next != nil; next, _ = c.Next() {
@@ -175,6 +183,111 @@ func (b *backend) Close() error {
 // Commits returns total number of commits since start
 func (b *backend) Commits() int64 {
 	return atomic.LoadInt64(&b.commits)
+}
+
+// TODO: make this non-blocking?
+func (b *backend) Shrink() error {
+	// lock batch tx and close previous ongoing tx.
+	b.batchTx.Lock()
+	defer b.batchTx.Unlock()
+	b.batchTx.commit(true)
+	b.batchTx.tx = nil
+
+	// lock database
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	tmpdb, err := bolt.Open(b.db.Path()+".tmp", 0600, boltOpenOptions)
+	if err != nil {
+		return err
+	}
+
+	err = shrinkdb(b.db, tmpdb, 10000)
+
+	if err != nil {
+		tmpdb.Close()
+		os.RemoveAll(tmpdb.Path())
+		return err
+	}
+
+	dbp := b.db.Path()
+	tdbp := tmpdb.Path()
+
+	err = b.db.Close()
+	if err != nil {
+		log.Fatalf("backend: cannot close database (%s)", err)
+	}
+	err = tmpdb.Close()
+	if err != nil {
+		log.Fatalf("backend: cannot close database (%s)", err)
+	}
+	err = os.Rename(tdbp, dbp)
+	if err != nil {
+		log.Fatalf("backend: cannot rename database (%s)", err)
+	}
+
+	b.db, err = bolt.Open(dbp, 0600, boltOpenOptions)
+	if err != nil {
+		log.Panicf("backend: cannot open database at %s (%v)", dbp, err)
+	}
+	b.batchTx.tx, err = b.db.Begin(true)
+	if err != nil {
+		log.Fatalf("backend: cannot begin tx (%s)", err)
+	}
+
+	return nil
+}
+
+func shrinkdb(odb, tmpdb *bolt.DB, limit int) error {
+	// open a tx on tmpdb for writes
+	tmptx, err := tmpdb.Begin(true)
+	if err != nil {
+		return err
+	}
+
+	// open a tx on old db for read
+	tx, err := odb.Begin(false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	c := tx.Cursor()
+
+	count := 0
+	for next, _ := c.First(); next != nil; next, _ = c.Next() {
+		b := tx.Bucket(next)
+		if b == nil {
+			return fmt.Errorf("backend: cannot shrink bucket %s", string(next))
+		}
+
+		tmpb, berr := tmptx.CreateBucketIfNotExists(next)
+		if berr != nil {
+			return berr
+		}
+
+		b.ForEach(func(k, v []byte) error {
+			count++
+			if count > limit {
+				err = tmptx.Commit()
+				if err != nil {
+					return err
+				}
+				tmptx, err = tmpdb.Begin(true)
+				if err != nil {
+					return err
+				}
+				tmpb = tmptx.Bucket(next)
+			}
+			err = tmpb.Put(k, v)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+	}
+
+	return tmptx.Commit()
 }
 
 // NewTmpBackend creates a backend implementation for testing.

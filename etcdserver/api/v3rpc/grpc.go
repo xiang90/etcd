@@ -36,5 +36,6 @@ func Server(s *etcdserver.EtcdServer, tls *transport.TLSInfo) (*grpc.Server, err
 	pb.RegisterWatchServer(grpcServer, NewWatchServer(s))
 	pb.RegisterLeaseServer(grpcServer, NewLeaseServer(s))
 	pb.RegisterClusterServer(grpcServer, NewClusterServer(s))
+	pb.RegisterMaintenanceServer(grpcServer, NewMaintenanceServer(s))
 	return grpcServer, nil
 }

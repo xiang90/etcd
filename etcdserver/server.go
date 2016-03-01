@@ -1313,3 +1313,5 @@ func (s *EtcdServer) parseProposeCtxErr(err error, start time.Time) error {
 }
 
 func (s *EtcdServer) getKV() dstorage.ConsistentWatchableKV { return s.kv }
+
+func (s *EtcdServer) Backend() backend.Backend { return s.be }

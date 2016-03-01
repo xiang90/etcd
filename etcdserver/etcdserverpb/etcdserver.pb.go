@@ -50,6 +50,8 @@
 		MemberUpdateResponse
 		MemberListRequest
 		MemberListResponse
+		ShrinkRequest
+		ShrinkResponse
 */
 package etcdserverpb
 

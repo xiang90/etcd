@@ -76,6 +76,11 @@ service Cluster {
   rpc MemberList(MemberListRequest) returns (MemberListResponse) {}
 }
 
+service Maintenance {
+  // TODO: move Hash from kv to Maintenance
+  rpc Shrink(ShrinkRequest) returns (ShrinkResponse) {}
+}
+
 message ResponseHeader {
   uint64 cluster_id = 1;
   uint64 member_id = 2;
@@ -374,4 +379,12 @@ message MemberListRequest {
 message MemberListResponse {
   ResponseHeader header = 1;
   repeated Member members = 2;
+}
+
+message ShrinkRequest {
+  
+}
+
+message ShrinkResponse {
+  
 }
