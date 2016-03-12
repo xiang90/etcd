@@ -205,14 +205,17 @@ func (r *raftNode) start(s *EtcdServer) {
 					r.raftStorage.ApplySnapshot(rd.Snapshot)
 					plog.Infof("raft applied incoming snapshot at index %d", rd.Snapshot.Metadata.Index)
 				}
+
+				sss := time.Now()
 				if err := r.storage.Save(rd.HardState, rd.Entries); err != nil {
 					plog.Fatalf("raft save state and entries error: %v", err)
 				}
+				plog.Info("raft.storage.save", time.Since(sss))
 
 				sst := time.Now()
 				r.raftStorage.Append(rd.Entries)
 				if len(rd.Entries) != 0 {
-					plog.Info("raft.storage.save", time.Since(sst))
+					plog.Info("raft.rstorage.append", time.Since(sst))
 				}
 				if len(rd.Messages) != 0 {
 					plog.Info("raft.send.", len(rd.Messages))
