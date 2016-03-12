@@ -174,6 +174,7 @@ func (p *peer) send(m raftpb.Message) {
 	writec, name := p.pick(m)
 	select {
 	case writec <- m:
+		plog.Info("peer.send.", m.Type)
 	default:
 		p.r.ReportUnreachable(m.To)
 		if isMsgSnap(m) {

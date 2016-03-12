@@ -160,9 +160,11 @@ func (cw *streamWriter) run() {
 		case m := <-msgc:
 			start := time.Now()
 			err := enc.encode(m)
+			plog.Info("stream.encode", m.Type)
 			if err == nil {
 				if len(msgc) == 0 || batched > streamBufSize/2 {
 					flusher.Flush()
+					plog.Info("stream.flush")
 					batched = 0
 				} else {
 					batched++
