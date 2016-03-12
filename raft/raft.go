@@ -599,6 +599,7 @@ func stepLeader(r *raft, m pb.Message) {
 			}
 		}
 		r.appendEntry(m.Entries...)
+		r.logger.Infof("received.proposal(%d).%d", len(m.Entries), r.raftLog.lastIndex())
 		r.bcastAppend()
 		return
 	case pb.MsgVote:
@@ -642,6 +643,7 @@ func stepLeader(r *raft, m pb.Message) {
 				}
 
 				if r.maybeCommit() {
+					r.logger.Infof("commit.%d", r.raftLog.committed)
 					r.bcastAppend()
 				} else if oldPaused {
 					// update() reset the wait state on this node. If we had delayed sending

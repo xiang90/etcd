@@ -212,7 +212,9 @@ func (r *raftNode) start(s *EtcdServer) {
 
 				sst := time.Now()
 				r.raftStorage.Append(rd.Entries)
-				fmt.Println("raft.storage.save", time.Since(sst))
+				if len(rd.Entries) != 0 {
+					fmt.Println("raft.storage.save", time.Since(sst))
+				}
 
 				r.s.send(rd.Messages)
 				raftDone <- struct{}{}
