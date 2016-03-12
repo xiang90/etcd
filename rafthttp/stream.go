@@ -332,6 +332,7 @@ func (cr *streamReader) decodeLoop(rc io.ReadCloser, t streamType) error {
 			cr.mu.Unlock()
 			return err
 		}
+		plog.Info("stream.recv.", m.Type)
 
 		if isLinkHeartbeatMessage(m) {
 			// raft is not interested in link layer
