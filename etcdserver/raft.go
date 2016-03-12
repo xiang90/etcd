@@ -151,6 +151,7 @@ func (r *raftNode) start(s *EtcdServer) {
 			case <-r.ticker:
 				r.Tick()
 			case rd := <-r.Ready():
+				plog.Info("recv.rd")
 				if rd.SoftState != nil {
 					if lead := atomic.LoadUint64(&r.lead); rd.SoftState.Lead != raft.None && lead != rd.SoftState.Lead {
 						r.mu.Lock()

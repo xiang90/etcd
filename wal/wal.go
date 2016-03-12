@@ -502,6 +502,7 @@ func (w *WAL) Save(st raftpb.HardState, ents []raftpb.Entry) error {
 		return nil
 	}
 
+	prevst := w.state
 	// TODO(xiangli): no more reference operator
 	for i := range ents {
 		if err := w.saveEntry(&ents[i]); err != nil {
@@ -517,7 +518,10 @@ func (w *WAL) Save(st raftpb.HardState, ents []raftpb.Entry) error {
 		return err
 	}
 	if fstat.Size() < segmentSizeBytes {
-		return w.sync()
+		if needSync(prevst, w.state, len(ents)) {
+			return w.sync()
+		}
+		return nil
 	}
 	// TODO: add a test for this code path when refactoring the tests
 	return w.cut()
@@ -542,4 +546,14 @@ func (w *WAL) SaveSnapshot(e walpb.Snapshot) error {
 
 func (w *WAL) saveCrc(prevCrc uint32) error {
 	return w.encoder.encode(&walpb.Record{Type: crcType, Crc: prevCrc})
+}
+
+func needSync(prevSt, st raftpb.HardState, entlen int) bool {
+	if entlen != 0 {
+		return true
+	}
+	if prevSt.Term != st.Term || prevSt.Vote != st.Vote {
+		return true
+	}
+	return false
 }
