@@ -207,6 +207,10 @@ func (r *raftNode) start(s *EtcdServer) {
 					plog.Infof("raft applied incoming snapshot at index %d", rd.Snapshot.Metadata.Index)
 				}
 
+				if rd.RaftState == raft.StateLeader {
+					r.s.send(rd.Messages)
+				}
+
 				sss := time.Now()
 				if err := r.storage.Save(rd.HardState, rd.Entries); err != nil {
 					plog.Fatalf("raft save state and entries error: %v", err)
@@ -221,7 +225,9 @@ func (r *raftNode) start(s *EtcdServer) {
 				if len(rd.Messages) != 0 {
 					plog.Info("raft.send.", len(rd.Messages))
 				}
-				r.s.send(rd.Messages)
+				if rd.RaftState != raft.StateLeader {
+					r.s.send(rd.Messages)
+				}
 				raftDone <- struct{}{}
 				r.Advance()
 			case <-syncC:
