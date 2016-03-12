@@ -269,6 +269,7 @@ func (r *raft) send(m pb.Message) {
 		m.Term = r.Term
 	}
 	r.msgs = append(r.msgs, m)
+	r.logger.Info("send.append.total", len(r.msgs))
 }
 
 // sendAppend sends RPC, with entries to the given peer.
@@ -568,7 +569,6 @@ func (r *raft) Step(m pb.Message) error {
 type stepFunc func(r *raft, m pb.Message)
 
 func stepLeader(r *raft, m pb.Message) {
-
 	// These message types do not require any progress for m.From.
 	switch m.Type {
 	case pb.MsgBeat:

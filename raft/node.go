@@ -340,6 +340,7 @@ func (n *node) run(r *raft) {
 		case <-n.tickc:
 			r.tick()
 		case readyc <- rd:
+			r.logger.Info("rd.sent")
 			if rd.SoftState != nil {
 				prevSoftSt = rd.SoftState
 			}
@@ -475,6 +476,9 @@ func newReady(r *raft, prevSoftSt *SoftState, prevHardSt pb.HardState) Ready {
 		CommittedEntries: r.raftLog.nextEnts(),
 		Messages:         r.msgs,
 	}
+	r.logger.Info("rd.msg", len(rd.Messages))
+	r.logger.Info("rd.ent", len(rd.Entries))
+
 	if softSt := r.softState(); !softSt.equal(prevSoftSt) {
 		rd.SoftState = softSt
 	}
