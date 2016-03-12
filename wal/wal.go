@@ -399,7 +399,7 @@ func (w *WAL) sync() error {
 		}
 	}
 	start := time.Now()
-	err := w.f.Sync()
+	err := fdatasync(w)
 	syncDurations.Observe(float64(time.Since(start)) / float64(time.Second))
 	return err
 }
