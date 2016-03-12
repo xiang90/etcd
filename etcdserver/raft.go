@@ -145,6 +145,7 @@ func (r *raftNode) start(s *EtcdServer) {
 		var syncC <-chan time.Time
 
 		defer r.onStop()
+		islead := false
 
 		for {
 			select {
@@ -175,6 +176,7 @@ func (r *raftNode) start(s *EtcdServer) {
 							r.s.compactor.Resume()
 						}
 						r.td.Reset()
+						islead = true
 					} else {
 						if r.s.lessor != nil {
 							r.s.lessor.Demote()
@@ -183,6 +185,7 @@ func (r *raftNode) start(s *EtcdServer) {
 							r.s.compactor.Pause()
 						}
 						syncC = nil
+						islead = false
 					}
 				}
 
@@ -207,7 +210,7 @@ func (r *raftNode) start(s *EtcdServer) {
 					plog.Infof("raft applied incoming snapshot at index %d", rd.Snapshot.Metadata.Index)
 				}
 
-				if rd.RaftState == raft.StateLeader {
+				if islead {
 					r.s.send(rd.Messages)
 				}
 
@@ -225,7 +228,7 @@ func (r *raftNode) start(s *EtcdServer) {
 				if len(rd.Messages) != 0 {
 					plog.Info("raft.send.", len(rd.Messages))
 				}
-				if rd.RaftState != raft.StateLeader {
+				if !islead {
 					r.s.send(rd.Messages)
 				}
 				raftDone <- struct{}{}
