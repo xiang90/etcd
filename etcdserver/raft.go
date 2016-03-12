@@ -17,7 +17,6 @@ package etcdserver
 import (
 	"encoding/json"
 	"expvar"
-	"fmt"
 	"os"
 	"sort"
 	"sync"
@@ -213,9 +212,11 @@ func (r *raftNode) start(s *EtcdServer) {
 				sst := time.Now()
 				r.raftStorage.Append(rd.Entries)
 				if len(rd.Entries) != 0 {
-					fmt.Println("raft.storage.save", time.Since(sst))
+					plog.Info("raft.storage.save", time.Since(sst))
 				}
-
+				if len(rd.Messages) != 0 {
+					plog.Info("raft.send.", len(rd.Messages))
+				}
 				r.s.send(rd.Messages)
 				raftDone <- struct{}{}
 				r.Advance()
