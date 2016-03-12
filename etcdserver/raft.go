@@ -17,6 +17,7 @@ package etcdserver
 import (
 	"encoding/json"
 	"expvar"
+	"fmt"
 	"os"
 	"sort"
 	"sync"
@@ -208,7 +209,10 @@ func (r *raftNode) start(s *EtcdServer) {
 				if err := r.storage.Save(rd.HardState, rd.Entries); err != nil {
 					plog.Fatalf("raft save state and entries error: %v", err)
 				}
+
+				sst := time.Now()
 				r.raftStorage.Append(rd.Entries)
+				fmt.Println("raft.storage.save", time.Since(sst))
 
 				r.s.send(rd.Messages)
 				raftDone <- struct{}{}

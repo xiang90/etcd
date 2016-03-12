@@ -190,6 +190,8 @@ type applyResult struct {
 func (s *EtcdServer) processInternalRaftRequest(ctx context.Context, r pb.InternalRaftRequest) (*applyResult, error) {
 	r.ID = s.reqIDGen.Next()
 
+	st := time.Now()
+
 	data, err := r.Marshal()
 	if err != nil {
 		return nil, err
@@ -205,6 +207,7 @@ func (s *EtcdServer) processInternalRaftRequest(ctx context.Context, r pb.Intern
 
 	select {
 	case x := <-ch:
+		fmt.Println("process.total:", time.Since(st))
 		return x.(*applyResult), nil
 	case <-ctx.Done():
 		s.w.Trigger(r.ID, nil) // GC wait
