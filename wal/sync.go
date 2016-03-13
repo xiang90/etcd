@@ -16,6 +16,14 @@
 
 package wal
 
+import (
+	"fmt"
+	"time"
+)
+
 func fdatasync(w *WAL) error {
-	return w.f.Sync()
+	start := time.Now()
+	err := w.f.Sync()
+	fmt.Println("sync", time.Since(start))
+	return err
 }
