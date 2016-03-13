@@ -16,8 +16,15 @@
 
 package wal
 
-import "syscall"
+import (
+	"fmt"
+	"syscall"
+	"time"
+)
 
 func fdatasync(w *WAL) error {
-	return syscall.Fdatasync(int(w.f.Fd()))
+	start := time.Now()
+	err := syscall.Fdatasync(int(w.f.Fd()))
+	fmt.Println("sync", time.Since(start))
+	return err
 }
