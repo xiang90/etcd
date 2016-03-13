@@ -94,7 +94,7 @@ func Create(dirpath string, metadata []byte) (*WAL, error) {
 	}
 
 	p := path.Join(dirpath, walName(0, 0))
-	f, err := os.OpenFile(p, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
+	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +197,7 @@ func openAtIndex(dirpath string, snap walpb.Snapshot, write bool) (*WAL, error) 
 		}
 		last := path.Join(dirpath, names[len(names)-1])
 
-		f, err := os.OpenFile(last, os.O_WRONLY|os.O_APPEND, 0)
+		f, err := os.OpenFile(last, os.O_WRONLY, 0)
 		if err != nil {
 			rc.Close()
 			return nil, err
