@@ -299,6 +299,10 @@ func startEtcd(cfg *config) (<-chan struct{}, error) {
 		StrictReconfigCheck:     cfg.strictReconfigCheck,
 		EnablePprof:             cfg.enablePprof,
 	}
+	if cfg.enablePprof {
+		runtime.SetBlockProfileRate(1)
+	}
+
 	var s *etcdserver.EtcdServer
 	s, err = etcdserver.NewServer(srvcfg)
 	if err != nil {
