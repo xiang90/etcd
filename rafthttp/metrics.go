@@ -46,6 +46,9 @@ var (
 	},
 		[]string{"sendingType", "remoteID", "msgType"},
 	)
+
+	sampleSentMetrics = 100
+	sampleCnt         int
 )
 
 func init() {
@@ -57,6 +60,13 @@ func reportSentDuration(sendingType string, m raftpb.Message, duration time.Dura
 	typ := m.Type.String()
 	if isLinkHeartbeatMessage(m) {
 		typ = "MsgLinkHeartbeat"
+	} else {
+		sampleCnt++
+		if sampleCnt == 100 {
+			sampleCnt = 0
+		} else {
+			return
+		}
 	}
 	msgSentDuration.WithLabelValues(sendingType, types.ID(m.To).String(), typ).Observe(float64(duration) / float64(time.Second))
 }
