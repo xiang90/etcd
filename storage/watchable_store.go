@@ -129,29 +129,29 @@ func (s *watchableStore) TxnEnd(txnID int64) error {
 		return err
 	}
 
-	changes := s.getChanges()
-	if len(changes) == 0 {
-		s.mu.Unlock()
-		return nil
-	}
+	// changes := s.getChanges()
+	// if len(changes) == 0 {
+	// 	s.mu.Unlock()
+	// 	return nil
+	// }
 
-	rev := s.store.Rev()
-	evs := make([]storagepb.Event, len(changes))
-	for i, change := range changes {
-		switch change.CreateRevision {
-		case 0:
-			evs[i] = storagepb.Event{
-				Type: storagepb.DELETE,
-				Kv:   &changes[i]}
-			evs[i].Kv.ModRevision = rev
-		default:
-			evs[i] = storagepb.Event{
-				Type: storagepb.PUT,
-				Kv:   &changes[i]}
-		}
-	}
+	// rev := s.store.Rev()
+	// evs := make([]storagepb.Event, len(changes))
+	// for i, change := range changes {
+	// 	switch change.CreateRevision {
+	// 	case 0:
+	// 		evs[i] = storagepb.Event{
+	// 			Type: storagepb.DELETE,
+	// 			Kv:   &changes[i]}
+	// 		evs[i].Kv.ModRevision = rev
+	// 	default:
+	// 		evs[i] = storagepb.Event{
+	// 			Type: storagepb.PUT,
+	// 			Kv:   &changes[i]}
+	// 	}
+	// }
 
-	s.notify(rev, evs)
+	// s.notify(rev, evs)
 	s.mu.Unlock()
 
 	return nil
