@@ -765,6 +765,7 @@ func TestIsElectionTimeout(t *testing.T) {
 		sm.electionElapsed = tt.elapse
 		c := 0
 		for j := 0; j < 10000; j++ {
+			sm.resetRandomizedElectionTimeout()
 			if sm.isElectionTimeout() {
 				c++
 			}
