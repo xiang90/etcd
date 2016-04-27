@@ -392,6 +392,7 @@ func (w *watcher) serveWatchClient(wc pb.Watch_WatchClient) {
 		if err != nil {
 			select {
 			case w.errc <- err:
+				fmt.Println("recv error", err)
 			case <-w.donec:
 			}
 			return
