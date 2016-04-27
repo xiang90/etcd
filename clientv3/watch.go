@@ -339,6 +339,7 @@ func (w *watcher) run() {
 			fmt.Println("errc")
 			if wc, wcerr = w.newWatchClient(); wcerr != nil {
 				w.errc <- wcerr
+				fmt.Println("returned")
 				return
 			}
 			curReqC = w.reqc
