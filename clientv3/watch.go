@@ -490,6 +490,7 @@ func (w *watcher) newWatchClient() (pb.Watch_WatchClient, error) {
 // resume creates a new WatchClient with all current watchers reestablished
 func (w *watcher) resume() (ws pb.Watch_WatchClient, err error) {
 	for {
+		fmt.Println("resume...")
 		if ws, err = w.openWatchClient(); err != nil {
 			break
 		} else if err = w.resumeWatchers(ws); err == nil {
