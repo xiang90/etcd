@@ -335,6 +335,7 @@ func (w *watcher) run() {
 		// watch client failed to recv; spawn another if possible
 		// TODO report watch client errors from errc?
 		case <-w.errc:
+			fmt.Println("errc")
 			if wc, wcerr = w.newWatchClient(); wcerr != nil {
 				w.errc <- wcerr
 				return
@@ -479,6 +480,7 @@ func (w *watcher) serveStream(ws *watcherStream) {
 }
 
 func (w *watcher) newWatchClient() (pb.Watch_WatchClient, error) {
+	fmt.Println("newwatchclient")
 	ws, rerr := w.resume()
 	if rerr != nil {
 		return nil, rerr
@@ -492,11 +494,14 @@ func (w *watcher) resume() (ws pb.Watch_WatchClient, err error) {
 	for {
 		fmt.Println("resume...")
 		if ws, err = w.openWatchClient(); err != nil {
+			fmt.Println("open err", err)
 			break
 		} else if err = w.resumeWatchers(ws); err == nil {
 			break
 		}
+		fmt.Println("resume erro", err)
 	}
+	fmt.Println("end resume")
 	return ws, err
 }
 
