@@ -294,6 +294,8 @@ func (w *watcher) run() {
 	curReqC := w.reqc
 	cancelSet := make(map[int64]struct{})
 
+	fmt.Println("run")
+
 	for {
 		select {
 		// Watch() requested
@@ -335,8 +337,8 @@ func (w *watcher) run() {
 			}
 		// watch client failed to recv; spawn another if possible
 		// TODO report watch client errors from errc?
-		case <-w.errc:
-			fmt.Println("errc")
+		case e := <-w.errc:
+			fmt.Println("errc", e)
 			if wc, wcerr = w.newWatchClient(); wcerr != nil {
 				w.errc <- wcerr
 				fmt.Println("returned")
