@@ -285,6 +285,7 @@ func (w *watcher) run() {
 	// start a stream with the etcd grpc server
 	wc, wcerr := w.newWatchClient()
 	if wcerr != nil {
+		fmt.Println("run errc", wcerr)
 		w.errc <- wcerr
 		return
 	}
