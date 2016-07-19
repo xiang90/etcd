@@ -87,20 +87,12 @@ func (s *EtcdServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeRe
 		<-s.timedw.Wait(time.Now())
 	}
 
-	user, err := s.usernameFromCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
 	result := s.applyV3.Apply(
 		&pb.InternalRaftRequest{
-			Header: &pb.RequestHeader{Username: user},
-			Range:  r,
+			Range: r,
 		},
 	)
 
-	if err != nil {
-		return nil, err
-	}
 	if result.err != nil {
 		return nil, result.err
 	}

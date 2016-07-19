@@ -63,9 +63,6 @@ func (aa *authApplierV3) Put(txnID int64, r *pb.PutRequest) (*pb.PutResponse, er
 }
 
 func (aa *authApplierV3) Range(txnID int64, r *pb.RangeRequest) (*pb.RangeResponse, error) {
-	if !aa.as.IsRangePermitted(aa.user, r.Key, r.RangeEnd) {
-		return nil, auth.ErrPermissionDenied
-	}
 	return aa.applierV3.Range(txnID, r)
 }
 
