@@ -86,17 +86,7 @@ func (s *EtcdServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeRe
 	if !r.Serializable {
 		<-s.timedw.Wait(time.Now())
 	}
-
-	result := s.applyV3.Apply(
-		&pb.InternalRaftRequest{
-			Range: r,
-		},
-	)
-
-	if result.err != nil {
-		return nil, result.err
-	}
-	return result.resp.(*pb.RangeResponse), nil
+	return s.applyV3.Range(noTxn, r)
 }
 
 func (s *EtcdServer) Put(ctx context.Context, r *pb.PutRequest) (*pb.PutResponse, error) {
