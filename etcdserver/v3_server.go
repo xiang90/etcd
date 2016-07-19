@@ -83,22 +83,21 @@ type Authenticator interface {
 }
 
 func (s *EtcdServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeResponse, error) {
-	var result *applyResult
-	var err error
-
-	if r.Serializable {
-		var user string
-		user, err = s.usernameFromCtx(ctx)
-		if err != nil {
-			return nil, err
-		}
-		result = s.applyV3.Apply(
-			&pb.InternalRaftRequest{
-				Header: &pb.RequestHeader{Username: user},
-				Range:  r})
-	} else {
-		result, err = s.processInternalRaftRequest(ctx, pb.InternalRaftRequest{Range: r})
+	if !r.Serializable {
+		<-s.timedw.Wait(time.Now())
 	}
+
+	user, err := s.usernameFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := s.applyV3.Apply(
+		&pb.InternalRaftRequest{
+			Header: &pb.RequestHeader{Username: user},
+			Range:  r,
+		},
+	)
+
 	if err != nil {
 		return nil, err
 	}

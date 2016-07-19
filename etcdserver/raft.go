@@ -103,6 +103,8 @@ type raftNode struct {
 	// a chan to send out apply
 	applyc chan apply
 
+	readStateC chan raft.ReadState
+
 	// TODO: remove the etcdserver related logic from raftNode
 	// TODO: add a state machine interface to apply the commit entries
 	// and do snapshot/recover
@@ -193,6 +195,14 @@ func (r *raftNode) start(s *EtcdServer) {
 							r.s.compactor.Pause()
 						}
 						syncC = nil
+					}
+				}
+
+				if rd.ReadState.Index != 0 {
+					select {
+					case r.readStateC <- rd.ReadState:
+					case <-r.stopped:
+						return
 					}
 				}
 

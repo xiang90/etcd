@@ -167,7 +167,9 @@ type EtcdServer struct {
 
 	snapCount uint64
 
-	w          wait.Wait
+	w      wait.Wait
+	timedw wait.WaitTime
+
 	stop       chan struct{}
 	done       chan struct{}
 	errorc     chan error
@@ -373,6 +375,7 @@ func NewServer(cfg *ServerConfig) (srv *EtcdServer, err error) {
 			ticker:      time.Tick(time.Duration(cfg.TickMs) * time.Millisecond),
 			raftStorage: s,
 			storage:     NewStorage(w, ss),
+			readStateC:  make(chan raft.ReadState, 128),
 		},
 		id:            id,
 		attributes:    membership.Attributes{Name: cfg.Name, ClientURLs: cfg.ClientURLs.StringSlice()},
@@ -449,6 +452,7 @@ func (s *EtcdServer) Start() {
 	go s.purgeFile()
 	go monitorFileDescriptor(s.done)
 	go s.monitorVersions()
+	go s.linearizableReadLoop()
 }
 
 // start prepares and starts server in a new goroutine. It is no longer safe to
@@ -460,6 +464,7 @@ func (s *EtcdServer) start() {
 		s.snapCount = DefaultSnapCount
 	}
 	s.w = wait.New()
+	s.timedw = wait.NewTimeList()
 	s.done = make(chan struct{})
 	s.stop = make(chan struct{})
 	if s.ClusterVersion() != nil {
@@ -1321,6 +1326,29 @@ func (s *EtcdServer) parseProposeCtxErr(err error, start time.Time) error {
 		return ErrTimeout
 	default:
 		return err
+	}
+}
+
+func (s *EtcdServer) linearizableReadLoop() {
+	for {
+		ts := time.Now()
+		if err := s.r.ReadIndex(context.TODO(), nil); err != nil {
+			continue
+		}
+		var rs raft.ReadState
+		select {
+		case rs = <-s.r.readStateC:
+		case <-time.After(time.Second):
+			continue
+		}
+		for {
+			ai := s.getAppliedIndex()
+			if ai >= rs.Index {
+				s.timedw.Trigger(ts)
+				break
+			}
+			time.Sleep(1 * time.Millisecond)
+		}
 	}
 }
 
