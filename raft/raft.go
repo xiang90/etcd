@@ -535,6 +535,9 @@ func (r *raft) becomeLeader() {
 }
 
 func (r *raft) campaign(t CampaignType) {
+	if !r.promotable() {
+		return
+	}
 	r.becomeCandidate()
 	if r.quorum() == r.poll(r.id, true) {
 		r.becomeLeader()
