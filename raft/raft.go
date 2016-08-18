@@ -157,6 +157,11 @@ type ReadState struct {
 	RequestCtx []byte
 }
 
+type readIndexStatus struct {
+	req pb.Message
+	c   int
+}
+
 type raft struct {
 	id uint64
 
@@ -185,6 +190,8 @@ type raft struct {
 	leadTransferee uint64
 	// New configuration is ignored if there exists unapplied configuration.
 	pendingConf bool
+
+	pendingReadIndex *readIndexStatus
 
 	// number of ticks since it reached last electionTimeout when it is leader
 	// or candidate.
@@ -374,6 +381,11 @@ func (r *raft) sendHeartbeat(to uint64) {
 		Type:   pb.MsgHeartbeat,
 		Commit: commit,
 	}
+
+	if r.pendingReadIndex != nil {
+		m.Context = r.pendingReadIndex.req.Entries[0].Data
+	}
+
 	r.send(m)
 }
 
@@ -680,16 +692,18 @@ func stepLeader(r *raft, m pb.Message) {
 		r.send(pb.Message{To: m.From, Type: pb.MsgVoteResp, Reject: true})
 		return
 	case pb.MsgReadIndex:
-		ri := None
-		if r.checkQuorum {
-			ri = r.raftLog.committed
-		}
-		if m.From == None || m.From == r.id { // from local member
-			r.readState.Index = ri
-			r.readState.RequestCtx = m.Entries[0].Data
-		} else {
-			r.send(pb.Message{To: m.From, Type: pb.MsgReadIndexResp, Index: ri, Entries: m.Entries})
-		}
+		r.pendingReadIndex = &readIndexStatus{req: m}
+		r.bcastHeartbeat()
+
+		// if r.checkQuorum {
+		// 	ri = r.raftLog.committed
+		// }
+		// if m.From == None || m.From == r.id { // from local member
+		// 	r.readState.Index = ri
+		// 	r.readState.RequestCtx = m.Entries[0].Data
+		// } else {
+		// 	r.send(pb.Message{To: m.From, Type: pb.MsgReadIndexResp, Index: ri, Entries: m.Entries})
+		// }
 		return
 	}
 
@@ -749,6 +763,15 @@ func stepLeader(r *raft, m pb.Message) {
 		}
 		if pr.Match < r.raftLog.lastIndex() {
 			r.sendAppend(m.From)
+		}
+		if m.Context != nil && r.pendingReadIndex != nil {
+			if bytes.Equal(m.Context, r.pendingReadIndex.req.Entries[0].Data) {
+				r.pendingReadIndex.c += 1
+				if r.pendingReadIndex.c >= r.quorum() {
+					r.readState = r.pendingReadIndex.readState
+					r.pendingReadIndex = nil
+				}
+			}
 		}
 	case pb.MsgSnapStatus:
 		if pr.State != ProgressStateSnapshot {
@@ -914,7 +937,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 
 func (r *raft) handleHeartbeat(m pb.Message) {
 	r.raftLog.commitTo(m.Commit)
-	r.send(pb.Message{To: m.From, Type: pb.MsgHeartbeatResp})
+	r.send(pb.Message{To: m.From, Type: pb.MsgHeartbeatResp, Context: m.Context})
 }
 
 func (r *raft) handleSnapshot(m pb.Message) {
