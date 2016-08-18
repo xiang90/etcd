@@ -173,7 +173,9 @@ type EtcdServer struct {
 
 	snapCount uint64
 
-	w          wait.Wait
+	w         wait.Wait
+	readwaitc chan chan struct{}
+
 	stop       chan struct{}
 	done       chan struct{}
 	errorc     chan error
@@ -190,12 +192,15 @@ type EtcdServer struct {
 	applyV3 applierV3
 	// applyV3Base is the core applier without auth or quotas
 	applyV3Base applierV3
-	kv          mvcc.ConsistentWatchableKV
-	lessor      lease.Lessor
-	bemu        sync.Mutex
-	be          backend.Backend
-	authStore   auth.AuthStore
-	alarmStore  *alarm.AlarmStore
+
+	applyNotify chan struct{}
+
+	kv         mvcc.ConsistentWatchableKV
+	lessor     lease.Lessor
+	bemu       sync.Mutex
+	be         backend.Backend
+	authStore  auth.AuthStore
+	alarmStore *alarm.AlarmStore
 
 	stats  *stats.ServerStats
 	lstats *stats.LeaderStats
@@ -382,6 +387,7 @@ func NewServer(cfg *ServerConfig) (srv *EtcdServer, err error) {
 			ticker:      time.Tick(time.Duration(cfg.TickMs) * time.Millisecond),
 			raftStorage: s,
 			storage:     NewStorage(w, ss),
+			readStateC:  make(chan raft.ReadState, 1),
 		},
 		id:            id,
 		attributes:    membership.Attributes{Name: cfg.Name, ClientURLs: cfg.ClientURLs.StringSlice()},
@@ -393,6 +399,7 @@ func NewServer(cfg *ServerConfig) (srv *EtcdServer, err error) {
 		reqIDGen:      idutil.NewGenerator(uint16(id), time.Now()),
 		forceVersionC: make(chan struct{}),
 		msgSnapC:      make(chan raftpb.Message, maxInFlightMsgSnap),
+		applyNotify:   make(chan struct{}, 0),
 	}
 
 	srv.applyV2 = &applierV2store{store: srv.store, cluster: srv.cluster}
@@ -464,6 +471,7 @@ func (s *EtcdServer) Start() {
 	go s.purgeFile()
 	go monitorFileDescriptor(s.done)
 	go s.monitorVersions()
+	go s.linearizableReadLoop()
 }
 
 // start prepares and starts server in a new goroutine. It is no longer safe to
@@ -475,6 +483,7 @@ func (s *EtcdServer) start() {
 		s.snapCount = DefaultSnapCount
 	}
 	s.w = wait.New()
+	s.readwaitc = make(chan chan struct{}, 1024)
 	s.done = make(chan struct{})
 	s.stop = make(chan struct{})
 	if s.ClusterVersion() != nil {
@@ -633,6 +642,12 @@ func (s *EtcdServer) applyAll(ep *etcdProgress, apply *apply) {
 	// snapshot. or applied index might be greater than the last index in raft
 	// storage, since the raft routine might be slower than apply routine.
 	<-apply.raftDone
+
+	select {
+	case s.applyNotify <- struct{}{}:
+	default:
+	}
+
 	s.triggerSnapshot(ep)
 	select {
 	// snapshot requested via send()

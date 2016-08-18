@@ -15,6 +15,8 @@
 package etcdserver
 
 import (
+	"bytes"
+	"encoding/binary"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +26,7 @@ import (
 	"github.com/coreos/etcd/lease"
 	"github.com/coreos/etcd/lease/leasehttp"
 	"github.com/coreos/etcd/mvcc"
+	"github.com/coreos/etcd/raft"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/metadata"
 )
@@ -84,26 +87,31 @@ type Authenticator interface {
 }
 
 func (s *EtcdServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeResponse, error) {
-	if r.Serializable {
-		var resp *pb.RangeResponse
-		var err error
-		chk := func(ai *auth.AuthInfo) error {
-			return s.authStore.IsRangePermitted(ai, r.Key, r.RangeEnd)
+	if !r.Serializable {
+		ok := make(chan struct{})
+
+		select {
+		case s.readwaitc <- ok:
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
-		get := func() { resp, err = s.applyV3Base.Range(noTxn, r) }
-		if serr := s.doSerialize(ctx, chk, get); serr != nil {
-			return nil, serr
+
+		select {
+		case <-ok:
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
-		return resp, err
 	}
-	result, err := s.processInternalRaftRequest(ctx, pb.InternalRaftRequest{Range: r})
-	if err != nil {
-		return nil, err
+	var resp *pb.RangeResponse
+	var err error
+	chk := func(ai *auth.AuthInfo) error {
+		return s.authStore.IsRangePermitted(ai, r.Key, r.RangeEnd)
 	}
-	if result.err != nil {
-		return nil, result.err
+	get := func() { resp, err = s.applyV3Base.Range(noTxn, r) }
+	if serr := s.doSerialize(ctx, chk, get); serr != nil {
+		return nil, serr
 	}
-	return result.resp.(*pb.RangeResponse), nil
+	return resp, err
 }
 
 func (s *EtcdServer) Put(ctx context.Context, r *pb.PutRequest) (*pb.PutResponse, error) {
@@ -604,3 +612,49 @@ func (s *EtcdServer) processInternalRaftRequest(ctx context.Context, r pb.Intern
 
 // Watchable returns a watchable interface attached to the etcdserver.
 func (s *EtcdServer) Watchable() mvcc.WatchableKV { return s.KV() }
+
+func (s *EtcdServer) linearizableReadLoop() {
+	var rs raft.ReadState
+	oks := make([]chan struct{}, 0, 256)
+	ctx := make([]byte, 8)
+
+	for lc := uint64(0); ; lc++ {
+		binary.BigEndian.PutUint64(ctx, lc)
+
+		for (len(s.readwaitc) > 0 && len(oks) < 256) || (len(s.readwaitc) == 0 && len(oks) == 0) {
+			select {
+			case ok := <-s.readwaitc:
+				oks = append(oks, ok)
+			}
+		}
+
+		if err := s.r.ReadIndex(context.Background(), ctx); err != nil {
+			continue
+		}
+		select {
+		case rs = <-s.r.readStateC:
+			if !bytes.Equal(rs.RequestCtx, ctx) {
+				continue
+			}
+		case <-time.After(time.Second):
+			continue
+		}
+
+		for {
+			ai := s.getAppliedIndex()
+			if ai >= rs.Index {
+				// unblock all the l-read that happened before we requested the
+				// read index
+				for _, ok := range oks {
+					close(ok)
+				}
+				oks = make([]chan struct{}, 0, 256)
+				break
+			}
+			select {
+			case <-s.applyNotify:
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+	}
+}
