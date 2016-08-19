@@ -158,8 +158,9 @@ type ReadState struct {
 }
 
 type readIndexStatus struct {
-	req pb.Message
-	c   int
+	req   pb.Message
+	index uint64
+	c     int
 }
 
 type raft struct {
@@ -191,7 +192,7 @@ type raft struct {
 	// New configuration is ignored if there exists unapplied configuration.
 	pendingConf bool
 
-	pendingReadIndex *readIndexStatus
+	pendingReadIndex map[string]*readIndexStatus
 
 	// number of ticks since it reached last electionTimeout when it is leader
 	// or candidate.
@@ -250,6 +251,7 @@ func newRaft(c *Config) *raft {
 		heartbeatTimeout: c.HeartbeatTick,
 		logger:           c.Logger,
 		checkQuorum:      c.CheckQuorum,
+		pendingReadIndex: make(map[string]*readIndexStatus),
 	}
 	r.rand = rand.New(rand.NewSource(int64(c.ID)))
 	for _, p := range peers {
@@ -368,7 +370,7 @@ func (r *raft) sendAppend(to uint64) {
 }
 
 // sendHeartbeat sends an empty MsgApp
-func (r *raft) sendHeartbeat(to uint64) {
+func (r *raft) sendHeartbeat(to uint64, ctx []byte) {
 	// Attach the commit as min(to.matched, r.committed).
 	// When the leader sends out heartbeat message,
 	// the receiver(follower) might not be matched with the leader
@@ -377,13 +379,10 @@ func (r *raft) sendHeartbeat(to uint64) {
 	// an unmatched index.
 	commit := min(r.prs[to].Match, r.raftLog.committed)
 	m := pb.Message{
-		To:     to,
-		Type:   pb.MsgHeartbeat,
-		Commit: commit,
-	}
-
-	if r.pendingReadIndex != nil {
-		m.Context = r.pendingReadIndex.req.Entries[0].Data
+		To:      to,
+		Type:    pb.MsgHeartbeat,
+		Commit:  commit,
+		Context: ctx,
 	}
 
 	r.send(m)
@@ -402,11 +401,15 @@ func (r *raft) bcastAppend() {
 
 // bcastHeartbeat sends RPC, without entries to all the peers.
 func (r *raft) bcastHeartbeat() {
+	r.bcastHeartbeatWithCtx(nil)
+}
+
+func (r *raft) bcastHeartbeatWithCtx(ctx []byte) {
 	for id := range r.prs {
 		if id == r.id {
 			continue
 		}
-		r.sendHeartbeat(id)
+		r.sendHeartbeat(id, ctx)
 		r.prs[id].resume()
 	}
 }
@@ -692,8 +695,9 @@ func stepLeader(r *raft, m pb.Message) {
 		r.send(pb.Message{To: m.From, Type: pb.MsgVoteResp, Reject: true})
 		return
 	case pb.MsgReadIndex:
-		r.pendingReadIndex = &readIndexStatus{req: m}
-		r.bcastHeartbeat()
+		ctx := m.Entries[0].Data
+		r.pendingReadIndex[string(ctx)] = &readIndexStatus{index: r.raftLog.committed, req: m}
+		r.bcastHeartbeatWithCtx(ctx)
 
 		// if r.checkQuorum {
 		// 	ri = r.raftLog.committed
@@ -764,15 +768,33 @@ func stepLeader(r *raft, m pb.Message) {
 		if pr.Match < r.raftLog.lastIndex() {
 			r.sendAppend(m.From)
 		}
-		if m.Context != nil && r.pendingReadIndex != nil {
-			if bytes.Equal(m.Context, r.pendingReadIndex.req.Entries[0].Data) {
-				r.pendingReadIndex.c += 1
-				if r.pendingReadIndex.c >= r.quorum() {
-					r.readState = r.pendingReadIndex.readState
-					r.pendingReadIndex = nil
-				}
-			}
+
+		if m.Context == nil {
+			return
 		}
+
+		ctx := string(m.Context)
+		rs, ok := r.pendingReadIndex[ctx]
+		if !ok {
+			return
+		}
+
+		rs.c++
+
+		if rs.c < r.quorum() {
+			return
+		}
+
+		req := rs.req
+		if req.From == None || req.From == r.id { // from local member
+			r.readState.Index = rs.index
+			r.readState.RequestCtx = req.Entries[0].Data
+		} else {
+			r.send(pb.Message{To: req.From, Type: pb.MsgReadIndexResp, Index: rs.index, Entries: req.Entries})
+		}
+
+		delete(r.pendingReadIndex, ctx)
+
 	case pb.MsgSnapStatus:
 		if pr.State != ProgressStateSnapshot {
 			return
