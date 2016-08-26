@@ -64,7 +64,7 @@ type Ready struct {
 	// when its applied index is greater than the index in ReadState.
 	// Note that the readState will be returned when raft receives msgReadIndex.
 	// The returned is only valid for the request that requested to read.
-	ReadState
+	ReadStates []ReadState
 
 	// Entries specifies entries to be saved to stable storage BEFORE
 	// Messages are sent.
@@ -102,7 +102,7 @@ func IsEmptySnap(sp pb.Snapshot) bool {
 func (rd Ready) containsUpdates() bool {
 	return rd.SoftState != nil || !IsEmptyHardState(rd.HardState) ||
 		!IsEmptySnap(rd.Snapshot) || len(rd.Entries) > 0 ||
-		len(rd.CommittedEntries) > 0 || len(rd.Messages) > 0 || rd.Index != None
+		len(rd.CommittedEntries) > 0 || len(rd.Messages) > 0 || len(rd.ReadStates) != 0
 }
 
 // Node represents a node in a raft cluster.
@@ -370,8 +370,7 @@ func (n *node) run(r *raft) {
 			}
 
 			r.msgs = nil
-			r.readState.Index = None
-			r.readState.RequestCtx = nil
+			r.readStates = nil
 			advancec = n.advancec
 		case <-advancec:
 			if prevHardSt.Commit != 0 {
@@ -516,12 +515,8 @@ func newReady(r *raft, prevSoftSt *SoftState, prevHardSt pb.HardState) Ready {
 	if r.raftLog.unstable.snapshot != nil {
 		rd.Snapshot = *r.raftLog.unstable.snapshot
 	}
-	if r.readState.Index != None {
-		c := make([]byte, len(r.readState.RequestCtx))
-		copy(c, r.readState.RequestCtx)
-
-		rd.Index = r.readState.Index
-		rd.RequestCtx = c
+	if len(r.readStates) != 0 {
+		rd.ReadStates = r.readStates
 	}
 	return rd
 }

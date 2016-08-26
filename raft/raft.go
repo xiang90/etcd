@@ -37,6 +37,13 @@ const (
 	StateLeader
 )
 
+type ReadOnlyOption int
+
+const (
+	ReadOnlySafe ReadOnlyOption = iota
+	ReadOnlyLeaseBased
+)
+
 // Possible values for CampaignType
 const (
 	// campaignElection represents the type of normal election
@@ -114,6 +121,15 @@ type Config struct {
 	// steps down when quorum is not active for an electionTimeout.
 	CheckQuorum bool
 
+	// ReadOnlyOpion specifies how the read only request is processed.
+	//
+	// ReadOnlySafe guarantees the linearizability of the read only request by
+	// communicating with the quorum. It is the default and suggested option.
+	//
+	// ReadOnlyLeaseBased ensures linearizability of the read only request by
+	// relying on the leader lease. It can be affected by clock drift.
+	ReadOnlyOption ReadOnlyOption
+
 	// Logger is the logger used for raft log. For multinode which can host
 	// multiple raft group, each raft group can have its own logger
 	Logger Logger
@@ -147,29 +163,13 @@ func (c *Config) validate() error {
 	return nil
 }
 
-// ReadState provides state for read only query.
-// It's caller's responsibility to send MsgReadIndex first before getting
-// this state from ready, It's also caller's duty to differentiate if this
-// state is what it requests through RequestCtx, eg. given a unique id as
-// RequestCtx
-type ReadState struct {
-	Index      uint64
-	RequestCtx []byte
-}
-
-type readIndexStatus struct {
-	req   pb.Message
-	index uint64
-	c     int
-}
-
 type raft struct {
 	id uint64
 
 	Term uint64
 	Vote uint64
 
-	readState ReadState
+	readStates []ReadState
 
 	// the log
 	raftLog *raftLog
@@ -192,7 +192,7 @@ type raft struct {
 	// New configuration is ignored if there exists unapplied configuration.
 	pendingConf bool
 
-	pendingReadIndex map[string]*readIndexStatus
+	readOnly *readOnly
 
 	// number of ticks since it reached last electionTimeout when it is leader
 	// or candidate.
@@ -242,7 +242,6 @@ func newRaft(c *Config) *raft {
 	r := &raft{
 		id:               c.ID,
 		lead:             None,
-		readState:        ReadState{Index: None, RequestCtx: nil},
 		raftLog:          raftlog,
 		maxMsgSize:       c.MaxSizePerMsg,
 		maxInflight:      c.MaxInflightMsgs,
@@ -251,7 +250,7 @@ func newRaft(c *Config) *raft {
 		heartbeatTimeout: c.HeartbeatTick,
 		logger:           c.Logger,
 		checkQuorum:      c.CheckQuorum,
-		pendingReadIndex: make(map[string]*readIndexStatus),
+		readOnly:         newReadOnly(c.ReadOnlyOption),
 	}
 	r.rand = rand.New(rand.NewSource(int64(c.ID)))
 	for _, p := range peers {
@@ -695,19 +694,26 @@ func stepLeader(r *raft, m pb.Message) {
 		r.send(pb.Message{To: m.From, Type: pb.MsgVoteResp, Reject: true})
 		return
 	case pb.MsgReadIndex:
-		ctx := m.Entries[0].Data
-		r.pendingReadIndex[string(ctx)] = &readIndexStatus{index: r.raftLog.committed, req: m}
-		r.bcastHeartbeatWithCtx(ctx)
+		if r.quorum() > 1 {
+			switch r.readOnly.option {
+			case ReadOnlySafe:
+				r.readOnly.addRequest(r.raftLog.committed, m)
+				r.bcastHeartbeatWithCtx(m.Entries[0].Data)
+			case ReadOnlyLeaseBased:
+				var ri uint64
+				if r.checkQuorum {
+					ri = r.raftLog.committed
+				}
+				if m.From == None || m.From == r.id { // from local member
+					r.readStates = append(r.readStates, ReadState{Index: r.raftLog.committed, RequestCtx: m.Entries[0].Data})
+				} else {
+					r.send(pb.Message{To: m.From, Type: pb.MsgReadIndexResp, Index: ri, Entries: m.Entries})
+				}
+			}
+		} else {
+			r.readStates = append(r.readStates, ReadState{Index: r.raftLog.committed, RequestCtx: m.Entries[0].Data})
+		}
 
-		// if r.checkQuorum {
-		// 	ri = r.raftLog.committed
-		// }
-		// if m.From == None || m.From == r.id { // from local member
-		// 	r.readState.Index = ri
-		// 	r.readState.RequestCtx = m.Entries[0].Data
-		// } else {
-		// 	r.send(pb.Message{To: m.From, Type: pb.MsgReadIndexResp, Index: ri, Entries: m.Entries})
-		// }
 		return
 	}
 
@@ -769,32 +775,24 @@ func stepLeader(r *raft, m pb.Message) {
 			r.sendAppend(m.From)
 		}
 
-		if m.Context == nil {
+		if r.readOnly.option != ReadOnlySafe || len(m.Context) == 0 {
 			return
 		}
 
-		ctx := string(m.Context)
-		rs, ok := r.pendingReadIndex[ctx]
-		if !ok {
+		ackCount := r.readOnly.recvAck(m)
+		if ackCount < r.quorum() {
 			return
 		}
 
-		rs.c++
-
-		if rs.c < r.quorum() {
-			return
+		rss := r.readOnly.advance(m)
+		for _, rs := range rss {
+			req := rs.req
+			if req.From == None || req.From == r.id { // from local member
+				r.readStates = append(r.readStates, ReadState{Index: rs.index, RequestCtx: req.Entries[0].Data})
+			} else {
+				r.send(pb.Message{To: req.From, Type: pb.MsgReadIndexResp, Index: rs.index, Entries: req.Entries})
+			}
 		}
-
-		req := rs.req
-		if req.From == None || req.From == r.id { // from local member
-			r.readState.Index = rs.index
-			r.readState.RequestCtx = req.Entries[0].Data
-		} else {
-			r.send(pb.Message{To: req.From, Type: pb.MsgReadIndexResp, Index: rs.index, Entries: req.Entries})
-		}
-
-		delete(r.pendingReadIndex, ctx)
-
 	case pb.MsgSnapStatus:
 		if pr.State != ProgressStateSnapshot {
 			return
@@ -936,9 +934,7 @@ func stepFollower(r *raft, m pb.Message) {
 			r.logger.Errorf("%x invalid format of MsgReadIndexResp from %x, entries count: %d", r.id, m.From, len(m.Entries))
 			return
 		}
-
-		r.readState.Index = m.Index
-		r.readState.RequestCtx = m.Entries[0].Data
+		r.readStates = append(r.readStates, ReadState{Index: m.Index, RequestCtx: m.Entries[0].Data})
 	}
 }
 

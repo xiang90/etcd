@@ -17,6 +17,7 @@ package etcdserver
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -618,8 +619,8 @@ func (s *EtcdServer) linearizableReadLoop() {
 	oks := make([]chan struct{}, 0, 256)
 	ctx := make([]byte, 8)
 
-	for lc := uint64(0); ; lc++ {
-		binary.BigEndian.PutUint64(ctx, lc)
+	for {
+		binary.BigEndian.PutUint64(ctx, s.reqIDGen.Next())
 
 		for (len(s.readwaitc) > 0 && len(oks) < 256) || (len(s.readwaitc) == 0 && len(oks) == 0) {
 			select {
@@ -634,9 +635,11 @@ func (s *EtcdServer) linearizableReadLoop() {
 		select {
 		case rs = <-s.r.readStateC:
 			if !bytes.Equal(rs.RequestCtx, ctx) {
+				fmt.Println("bad", ctx)
 				continue
 			}
 		case <-time.After(time.Second):
+			fmt.Println("timed out!")
 			continue
 		}
 

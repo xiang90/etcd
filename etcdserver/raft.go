@@ -17,6 +17,7 @@ package etcdserver
 import (
 	"encoding/json"
 	"expvar"
+	"fmt"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -199,10 +200,14 @@ func (r *raftNode) start(s *EtcdServer) {
 					}
 				}
 
-				if rd.ReadState.Index != 0 {
+				if len(rd.ReadStates) != 0 {
+					if len(rd.ReadStates) > 1 {
+						fmt.Println("drop len(rd.ReadStates)")
+					}
 					select {
-					case r.readStateC <- rd.ReadState:
+					case r.readStateC <- rd.ReadStates[len(rd.ReadStates)-1]:
 					default:
+						fmt.Println("drop ri")
 					}
 				}
 
