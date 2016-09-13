@@ -173,7 +173,9 @@ type EtcdServer struct {
 
 	snapCount uint64
 
-	w          wait.Wait
+	w         wait.Wait
+	readwaitc chan chan struct{}
+
 	stop       chan struct{}
 	done       chan struct{}
 	errorc     chan error
@@ -384,6 +386,7 @@ func NewServer(cfg *ServerConfig) (srv *EtcdServer, err error) {
 			ticker:      time.Tick(time.Duration(cfg.TickMs) * time.Millisecond),
 			raftStorage: s,
 			storage:     NewStorage(w, ss),
+			readStateC:  make(chan raft.ReadState, 1),
 		},
 		id:            id,
 		attributes:    membership.Attributes{Name: cfg.Name, ClientURLs: cfg.ClientURLs.StringSlice()},
@@ -471,6 +474,7 @@ func (s *EtcdServer) Start() {
 	go s.purgeFile()
 	go monitorFileDescriptor(s.done)
 	go s.monitorVersions()
+	go s.linearizableReadLoop()
 }
 
 // start prepares and starts server in a new goroutine. It is no longer safe to
@@ -485,6 +489,7 @@ func (s *EtcdServer) start() {
 	s.applyWait = wait.NewTimeList()
 	s.done = make(chan struct{})
 	s.stop = make(chan struct{})
+	s.readwaitc = make(chan chan struct{}, 1024)
 	if s.ClusterVersion() != nil {
 		plog.Infof("starting server... [version: %v, cluster version: %v]", version.Version, version.Cluster(s.ClusterVersion().String()))
 	} else {

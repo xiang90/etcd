@@ -17,6 +17,7 @@ package etcdserver
 import (
 	"encoding/json"
 	"expvar"
+	"fmt"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -102,6 +103,9 @@ type raftNode struct {
 
 	// a chan to send out apply
 	applyc chan apply
+
+	// a chan to send out readState
+	readStateC chan raft.ReadState
 
 	// TODO: remove the etcdserver related logic from raftNode
 	// TODO: add a state machine interface to apply the commit entries
@@ -193,6 +197,17 @@ func (r *raftNode) start(s *EtcdServer) {
 							r.s.compactor.Pause()
 						}
 						syncC = nil
+					}
+				}
+
+				if len(rd.ReadStates) != 0 {
+					if len(rd.ReadStates) > 1 {
+						fmt.Println("drop len(rd.ReadStates)")
+					}
+					select {
+					case r.readStateC <- rd.ReadStates[len(rd.ReadStates)-1]:
+					default:
+						fmt.Println("drop ri")
 					}
 				}
 
