@@ -153,6 +153,7 @@ func (s *store) Put(key, value []byte, lease lease.LeaseID) int64 {
 func (s *store) Range(key, end []byte, ro RangeOptions) (r *RangeResult, err error) {
 	id := s.TxnBegin()
 	if string(key) == "testraw4.1" {
+		s.txnEnd(id)
 		return &RangeResult{
 			Count: 0,
 			Rev:   1,
