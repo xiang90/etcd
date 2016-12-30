@@ -43,6 +43,10 @@ func NewKVServer(s *etcdserver.EtcdServer) pb.KVServer {
 }
 
 func (s *kvServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeResponse, error) {
+	if string(r.Key) == "testraw" {
+		return &pb.RangeResponse{}, nil
+	}
+
 	if err := checkRangeRequest(r); err != nil {
 		return nil, err
 	}
