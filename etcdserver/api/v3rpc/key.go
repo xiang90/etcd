@@ -62,7 +62,7 @@ func (s *kvServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeResp
 
 	if resp.Header == nil {
 		//plog.Panic("unexpected nil resp.Header")
-		resp.Header = &pb.RequestHeader{}
+		resp.Header = &pb.ResponseHeader{}
 	}
 	s.hdr.fill(resp.Header)
 	return resp, nil
