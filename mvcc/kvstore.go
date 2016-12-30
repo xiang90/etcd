@@ -184,10 +184,10 @@ func (s *store) DeleteRange(key, end []byte) (n, rev int64) {
 }
 
 func (s *store) TxnBegin() int64 {
-	s.mu.Lock()
+	//s.mu.Lock()
 	s.currentRev.sub = 0
 	s.tx = s.b.BatchTx()
-	s.tx.Lock()
+	//s.tx.Lock()
 
 	s.txnID = rand.Int63()
 	return s.txnID
@@ -218,14 +218,14 @@ func (s *store) txnEnd(txnID int64) error {
 	}
 	s.txnModify = false
 
-	s.tx.Unlock()
+	//s.tx.Unlock()
 	if s.currentRev.sub != 0 {
 		s.currentRev.main += 1
 	}
 	s.currentRev.sub = 0
 
 	dbTotalSize.Set(float64(s.b.Size()))
-	s.mu.Unlock()
+	//s.mu.Unlock()
 	return nil
 }
 
