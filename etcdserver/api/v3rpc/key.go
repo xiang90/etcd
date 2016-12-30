@@ -51,6 +51,10 @@ func (s *kvServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeResp
 		return nil, err
 	}
 
+	if string(r.Key) == "testraw1" {
+		return &pb.RangeResponse{}, nil
+	}
+
 	resp, err := s.kv.Range(ctx, r)
 	if err != nil {
 		return nil, togRPCError(err)

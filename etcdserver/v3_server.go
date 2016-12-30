@@ -105,15 +105,26 @@ func (s *EtcdServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeRe
 			return nil, err
 		}
 	}
+
+	if string(r.Key) == "testraw2" {
+		return &pb.RangeResponse{}, nil
+	}
+
 	var resp *pb.RangeResponse
 	var err error
 	chk := func(ai *auth.AuthInfo) error {
 		return s.authStore.IsRangePermitted(ai, r.Key, r.RangeEnd)
 	}
+
 	get := func() { resp, err = s.applyV3Base.Range(noTxn, r) }
 	if serr := s.doSerialize(ctx, chk, get); serr != nil {
 		return nil, serr
 	}
+
+	if string(r.Key) == "testraw6" {
+		return &pb.RangeResponse{}, nil
+	}
+
 	return resp, err
 }
 

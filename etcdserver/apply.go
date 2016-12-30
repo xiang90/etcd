@@ -245,6 +245,10 @@ func (a *applierV3backend) DeleteRange(txnID int64, dr *pb.DeleteRangeRequest) (
 }
 
 func (a *applierV3backend) Range(txnID int64, r *pb.RangeRequest) (*pb.RangeResponse, error) {
+	if string(r.Key) == "testraw3" {
+		return &pb.RangeResponse{}, nil
+	}
+
 	resp := &pb.RangeResponse{}
 	resp.Header = &pb.ResponseHeader{}
 
@@ -275,6 +279,10 @@ func (a *applierV3backend) Range(txnID int64, r *pb.RangeRequest) (*pb.RangeResp
 		Count: r.CountOnly,
 	}
 
+	if string(r.Key) == "testraw4" {
+		return &pb.RangeResponse{}, nil
+	}
+
 	if txnID != noTxn {
 		rr, err = a.s.KV().TxnRange(txnID, r.Key, r.RangeEnd, ro)
 		if err != nil {
@@ -285,6 +293,10 @@ func (a *applierV3backend) Range(txnID int64, r *pb.RangeRequest) (*pb.RangeResp
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if string(r.Key) == "testraw5" {
+		return &pb.RangeResponse{}, nil
 	}
 
 	if r.MaxModRevision != 0 {
