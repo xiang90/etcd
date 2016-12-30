@@ -31,7 +31,7 @@ import (
 
 var (
 	defaultBatchLimit    = 10000
-	defaultBatchInterval = 100 * time.Millisecond
+	defaultBatchInterval = 100 * time.Hour
 
 	defragLimit = 10000
 
