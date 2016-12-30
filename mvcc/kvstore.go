@@ -151,9 +151,7 @@ func (s *store) Put(key, value []byte, lease lease.LeaseID) int64 {
 }
 
 func (s *store) Range(key, end []byte, ro RangeOptions) (r *RangeResult, err error) {
-	id := s.TxnBegin()
-	kvs, count, rev, err := s.rangeKeys(key, end, ro.Limit, ro.Rev, ro.Count)
-	s.txnEnd(id)
+	kvs, count, rev, err := s.rangeKeys(key, end, ro.Limit, ro.Rev, ro.Count, true)
 
 	rangeCounter.Inc()
 
@@ -227,7 +225,7 @@ func (s *store) TxnRange(txnID int64, key, end []byte, ro RangeOptions) (r *Rang
 		return nil, ErrTxnIDMismatch
 	}
 
-	kvs, count, rev, err := s.rangeKeys(key, end, ro.Limit, ro.Rev, ro.Count)
+	kvs, count, rev, err := s.rangeKeys(key, end, ro.Limit, ro.Rev, ro.Count, false)
 
 	r = &RangeResult{
 		KVs:   kvs,
@@ -491,7 +489,7 @@ func (a *store) Equal(b *store) bool {
 }
 
 // range is a keyword in Go, add Keys suffix.
-func (s *store) rangeKeys(key, end []byte, limit, rangeRev int64, countOnly bool) (kvs []mvccpb.KeyValue, count int, curRev int64, err error) {
+func (s *store) rangeKeys(key, end []byte, limit, rangeRev int64, countOnly bool, readtx bool) (kvs []mvccpb.KeyValue, count int, curRev int64, err error) {
 	curRev = int64(s.currentRev.main)
 	if s.currentRev.sub > 0 {
 		curRev += 1
@@ -518,10 +516,22 @@ func (s *store) rangeKeys(key, end []byte, limit, rangeRev int64, countOnly bool
 		return nil, len(revpairs), curRev, nil
 	}
 
+	var rtx backend.ReadTx
+	if readtx {
+		rtx = s.b.ReadTx()
+		defer rtx.Rollback()
+	}
+
 	for _, revpair := range revpairs {
 		start, end := revBytesRange(revpair)
+		var vs [][]byte
 
-		_, vs := s.tx.UnsafeRange(keyBucketName, start, end, 0)
+		if readtx {
+			_, vs = rtx.Range(keyBucketName, start, end, 0)
+		} else {
+			_, vs = s.tx.UnsafeRange(keyBucketName, start, end, 0)
+		}
+
 		if len(vs) != 1 {
 			plog.Fatalf("range cannot find rev (%d,%d)", revpair.main, revpair.sub)
 		}

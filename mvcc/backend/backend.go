@@ -54,6 +54,7 @@ const (
 
 type Backend interface {
 	BatchTx() BatchTx
+	ReadTx() ReadTx
 	Snapshot() Snapshot
 	Hash(ignores map[IgnoreKey]struct{}) (uint32, error)
 	// Size returns the current size of the backend.
@@ -142,6 +143,16 @@ func (b *backend) Snapshot() Snapshot {
 		plog.Fatalf("cannot begin tx (%s)", err)
 	}
 	return &snapshot{tx}
+}
+
+func (b *backend) ReadTx() ReadTx {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	tx, err := b.db.Begin(false)
+	if err != nil {
+		plog.Fatalf("cannot begin tx (%s)", err)
+	}
+	return &readTx{tx}
 }
 
 type IgnoreKey struct {
