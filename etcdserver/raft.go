@@ -175,21 +175,6 @@ func (r *raftNode) start(rh *raftReadyHandler) {
 					}
 				}
 
-				raftDone := make(chan struct{}, 1)
-				ap := apply{
-					entries:  rd.CommittedEntries,
-					snapshot: rd.Snapshot,
-					raftDone: raftDone,
-				}
-
-				updateCommittedIndex(&ap, rh)
-
-				select {
-				case r.applyc <- ap:
-				case <-r.stopped:
-					return
-				}
-
 				// the leader can write to its disk in parallel with replicating to the followers and them
 				// writing to their disks.
 				// For more details, check raft thesis 10.2.1
@@ -219,6 +204,21 @@ func (r *raftNode) start(rh *raftReadyHandler) {
 				}
 
 				r.raftStorage.Append(rd.Entries)
+
+				raftDone := make(chan struct{}, 1)
+				ap := apply{
+					entries:  rd.CommittedEntries,
+					snapshot: rd.Snapshot,
+					raftDone: raftDone,
+				}
+
+				updateCommittedIndex(&ap, rh)
+
+				select {
+				case r.applyc <- ap:
+				case <-r.stopped:
+					return
+				}
 
 				if !islead {
 					// gofail: var raftBeforeFollowerSend struct{}
