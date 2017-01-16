@@ -1083,7 +1083,9 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 	}
 
 	if mlastIndex, ok := r.raftLog.maybeAppend(m.Index, m.LogTerm, m.Commit, m.Entries...); ok {
-		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: mlastIndex})
+		if len(m.Entries) != 0 {
+			r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: mlastIndex})
+		}
 	} else {
 		r.logger.Debugf("%x [logterm: %d, index: %d] rejected msgApp [logterm: %d, index: %d] from %x",
 			r.id, r.raftLog.zeroTermOnErrCompacted(r.raftLog.term(m.Index)), m.Index, m.LogTerm, m.Index, m.From)
