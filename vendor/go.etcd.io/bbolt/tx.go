@@ -154,14 +154,33 @@ func (tx *Tx) Commit() error {
 	if tx.stats.Rebalance > 0 {
 		tx.stats.RebalanceTime += time.Since(startTime)
 	}
+	fmt.Println("rebalance took", time.Since(startTime))
 
 	// spill data onto dirty pages.
 	startTime = time.Now()
+	os := tx.stats.Spill
+	ofa := tx.stats.FreelistAllocTime
+	off := tx.stats.FreelistFreeTime
+	onw := tx.stats.SpillNodeWriteTime
+	oncw := tx.stats.SpillNodeWriteCopyTime
+	ons := tx.stats.SpillNodeWriteSize
+	onos := tx.stats.SpillNodeWriteOversize
+	onct := tx.stats.SpillNodeWriteCopyCount
 	if err := tx.root.spill(); err != nil {
 		tx.rollback()
 		return err
 	}
 	tx.stats.SpillTime += time.Since(startTime)
+	fmt.Println("spill took", time.Since(startTime))
+	fmt.Println("freelist allocate took", tx.stats.FreelistAllocTime-ofa)
+	fmt.Println("freelist free took", tx.stats.FreelistFreeTime-off)
+	fmt.Println("node write took", tx.stats.SpillNodeWriteTime-onw)
+	fmt.Println("node write copy took", tx.stats.SpillNodeWriteCopyTime-oncw)
+	fmt.Println("node write size", tx.stats.SpillNodeWriteSize-ons)
+	fmt.Println("node write oversize", tx.stats.SpillNodeWriteOversize-onos)
+	fmt.Println("node write copy count", tx.stats.SpillNodeWriteCopyCount-onct)
+
+	fmt.Println("spilled ", tx.stats.Spill-os)
 
 	// Free the old root bucket.
 	tx.meta.root.root = tx.root.root
@@ -210,6 +229,7 @@ func (tx *Tx) Commit() error {
 		return err
 	}
 	tx.stats.WriteTime += time.Since(startTime)
+	fmt.Println("bolt write took", time.Since(startTime))
 
 	// Finalize the transaction.
 	tx.close()
@@ -662,9 +682,17 @@ type TxStats struct {
 	RebalanceTime time.Duration // total time spent rebalancing
 
 	// Split/Spill statistics.
-	Split     int           // number of nodes split
-	Spill     int           // number of nodes spilled
-	SpillTime time.Duration // total time spent spilling
+	Split                   int           // number of nodes split
+	Spill                   int           // number of nodes spilled
+	SpillTime               time.Duration // total time spent spilling
+	SpillNodeWriteTime      time.Duration
+	SpillNodeWriteCopyTime  time.Duration
+	SpillNodeWriteCopyCount int64
+	SpillNodeWriteSize      int64
+	SpillNodeWriteOversize  int
+
+	FreelistAllocTime time.Duration
+	FreelistFreeTime  time.Duration
 
 	// Write statistics.
 	Write     int           // number of writes performed

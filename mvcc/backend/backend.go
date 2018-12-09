@@ -32,8 +32,8 @@ import (
 )
 
 var (
-	defaultBatchLimit    = 10000
-	defaultBatchInterval = 100 * time.Millisecond
+	defaultBatchLimit    = 1000
+	defaultBatchInterval = 20 * time.Millisecond
 
 	defragLimit = 10000
 
@@ -140,6 +140,7 @@ func newBackend(bcfg BackendConfig) *backend {
 		*bopts = *boltOpenOptions
 	}
 	bopts.InitialMmapSize = bcfg.mmapSize()
+	//bopts.PageSize = 1024 * 16
 
 	db, err := bolt.Open(bcfg.Path, 0600, bopts)
 	if err != nil {
